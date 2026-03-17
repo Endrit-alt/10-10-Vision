@@ -2,8 +2,8 @@ package com.visibilityenhancer;
 
 import java.awt.Dimension;
 import java.awt.Graphics2D;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import javax.inject.Inject;
 import net.runelite.api.Client;
 import net.runelite.api.Player;
@@ -39,23 +39,14 @@ public class VisibilityEnhancerOverlay extends Overlay
 		Player local = client.getLocalPlayer();
 		WorldPoint localPoint = local != null ? local.getWorldLocation() : null;
 
-		// 1. Render local player outline
 		if (local != null && config.selfOutline())
 		{
 			renderOutlineLayers(local, config.selfOutlineColor());
 		}
 
-		// 2. Render outlines for ghosted players
 		if (config.othersOutline())
 		{
-			// Map to count how many players are on each tile
-			Map<WorldPoint, Integer> tileCounts = new HashMap<>();
-			for (Player p : plugin.getGhostedPlayers())
-			{
-				WorldPoint wp = p.getWorldLocation();
-				if (wp != null) tileCounts.put(wp, tileCounts.getOrDefault(wp, 0) + 1);
-			}
-
+			Set<WorldPoint> renderedTiles = new HashSet<>();
 			for (Player player : plugin.getGhostedPlayers())
 			{
 				WorldPoint playerPoint = player.getWorldLocation();
@@ -63,11 +54,9 @@ public class VisibilityEnhancerOverlay extends Overlay
 
 				if (config.hideStackedOutlines())
 				{
-					// Skip if on your tile
 					if (localPoint != null && playerPoint.equals(localPoint)) continue;
-
-					// Skip if more than 1 person is on this tile (removes outline for all)
-					if (tileCounts.getOrDefault(playerPoint, 0) > 1) continue;
+					if (renderedTiles.contains(playerPoint)) continue;
+					renderedTiles.add(playerPoint);
 				}
 
 				renderOutlineLayers(player, config.othersOutlineColor());
