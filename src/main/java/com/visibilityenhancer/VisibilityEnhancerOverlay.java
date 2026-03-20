@@ -81,7 +81,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 		if (local != null && config.selfOutline())
 		{
 			Model localModel = local.getModel();
-			// Only draw self outline/floor tile if there is NO color override active
 			if (localModel == null || localModel.getOverrideAmount() == 0)
 			{
 				if (config.selfUseFloorTileOutline())
@@ -122,7 +121,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 				WorldPoint playerPoint = player.getWorldLocation();
 				if (playerPoint == null) continue;
 
-				// Only draw outline/floor tile if the ghost player has NO color override active
 				Model pModel = player.getModel();
 				if (pModel != null && pModel.getOverrideAmount() != 0)
 				{
@@ -148,11 +146,9 @@ public class VisibilityEnhancerOverlay extends Overlay
 		}
 
 		boolean othersCustomPrayers = config.othersTransparentPrayers();
-		boolean hideGhostExtras = config.hideGhostExtras();
 
-		if (othersCustomPrayers || hideGhostExtras)
+		if (othersCustomPrayers)
 		{
-			// Track which tiles we have already drawn a prayer on
 			Set<WorldPoint> renderedPrayerTiles = new HashSet<>();
 
 			for (Player player : plugin.getGhostedPlayers())
@@ -161,14 +157,11 @@ public class VisibilityEnhancerOverlay extends Overlay
 
 				if (playerPoint != null)
 				{
-					// If the ghost is standing on YOUR tile, skip drawing their prayer
-					// so your native client prayer takes priority.
 					if (localPoint != null && playerPoint.equals(localPoint))
 					{
 						continue;
 					}
 
-					// If we already rendered a ghost's prayer on this exact tile, skip drawing another one.
 					if (renderedPrayerTiles.contains(playerPoint))
 					{
 						continue;
@@ -177,12 +170,24 @@ public class VisibilityEnhancerOverlay extends Overlay
 					renderedPrayerTiles.add(playerPoint);
 				}
 
-				if (othersCustomPrayers)
+				// 1. Draw Prayer
+				drawTransparentPrayer(graphics, player, config.playerOpacity());
+				drawOverheadText(graphics, player);
+
+				// 2. Draw Simplified HP Bar
+				int ratio = player.getHealthRatio();
+				int scale = player.getHealthScale();
+				if (ratio > -1 && scale > 0)
 				{
-					drawTransparentPrayer(graphics, player, config.playerOpacity());
+					drawTransparentHpBar(graphics, player, ratio, scale, config.playerOpacity());
 				}
 
-				drawOverheadText(graphics, player);
+				// 3. Draw Simplified Hitsplats
+				List<VisibilityEnhancer.CustomHitsplat> hitsplats = plugin.getCustomHitsplats().get(player);
+				if (hitsplats != null && !hitsplats.isEmpty())
+				{
+					drawTransparentHitsplats(graphics, player, hitsplats, config.playerOpacity());
+				}
 			}
 		}
 
@@ -207,10 +212,8 @@ public class VisibilityEnhancerOverlay extends Overlay
 			if (cachedColor == null || !cachedColor.equals(color))
 			{
 				cachedColor = color;
-
 				cachedGlowColor = new Color(color.getRed(), color.getGreen(), color.getBlue(), Math.max(0, color.getAlpha() - 100));
 				cachedFillColor = new Color(color.getRed(), color.getGreen(), color.getBlue(), 50);
-
 			}
 
 			if (cachedOutlineWidth != config.outlineWidth())
@@ -222,7 +225,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 			if (cachedGlowWidth != config.glowWidth() || cachedOutlineWidth != config.outlineWidth())
 			{
 				cachedGlowWidth = config.glowWidth();
-
 				glowStroke = new BasicStroke(cachedOutlineWidth + cachedGlowWidth);
 			}
 
@@ -251,19 +253,16 @@ public class VisibilityEnhancerOverlay extends Overlay
 		if (icon == null) return;
 
 		int spriteId = getSpriteId(icon);
-
 		if (spriteId == -1) return;
 
 		BufferedImage prayerImage = spriteManager.getSprite(spriteId, 0);
 		if (prayerImage == null) return;
 
 		int zOffset = 20;
-
 		Point point = player.getCanvasImageLocation(prayerImage, player.getLogicalHeight() + zOffset);
 		if (point == null) return;
 
 		int drawX = point.getX();
-
 		int drawY = point.getY() - 25;
 
 		float alpha = opacityPercent / 100f;
@@ -273,6 +272,108 @@ public class VisibilityEnhancerOverlay extends Overlay
 		graphics.drawImage(prayerImage, drawX, drawY, null);
 
 		graphics.setComposite(originalComposite);
+	}
+
+	private void drawTransparentHpBar(Graphics2D graphics, Player player, int ratio, int scale, int opacityPercent)
+	{
+		int alpha = (int) ((opacityPercent / 100f) * 255);
+		if (alpha <= 0) return;
+
+		// Revert to using the dynamic 2D overhead calculation so it doesn't clip into the head on different camera tilts!
+		// We use Z-offset of 15 to tuck it cleanly underneath the custom prayer icon.
+		Point point = player.getCanvasTextLocation(graphics, "", player.getLogicalHeight() + 15);
+		if (point == null) return;
+
+		int width = 30;
+		int height = 5;
+		int fill = (int) (((float) ratio / scale) * width);
+
+		int x = point.getX() - (width / 2);
+		int y = point.getY();
+
+		// Draw red background
+		graphics.setColor(new Color(255, 0, 0, alpha));
+		graphics.fillRect(x, y, width, height);
+
+		// Draw green remaining health
+		graphics.setColor(new Color(0, 255, 0, alpha));
+		graphics.fillRect(x, y, fill, height);
+
+		// Draw black outline
+		graphics.setColor(new Color(0, 0, 0, alpha));
+		graphics.drawRect(x, y, width, height);
+	}
+
+	private void drawTransparentHitsplats(Graphics2D graphics, Player player, List<VisibilityEnhancer.CustomHitsplat> hitsplats, int opacityPercent)
+	{
+		// Text and outline alpha (0-255)
+		int alpha = (int) ((opacityPercent / 100f) * 255);
+		if (alpha <= 0) return;
+
+		// Background alpha caps at 80% of the text alpha
+		int bgAlpha = (int) (alpha * 0.8f);
+
+		LocalPoint lp = player.getLocalLocation();
+		if (lp == null) return;
+
+		Point basePoint = Perspective.localToCanvas(client, lp, client.getPlane(), player.getLogicalHeight() / 2);
+		if (basePoint == null) return;
+
+		graphics.setFont(FontManager.getRunescapeBoldFont().deriveFont(13f));
+		java.awt.FontMetrics fm = graphics.getFontMetrics();
+
+		// Shave 1 pixel off the calculated height to tighten the box vertically
+		int boxTextHeight = fm.getAscent() - 1;
+
+		// Exactly 2 pixels of padding on all sides
+		int paddingX = 2;
+		int paddingY = 2;
+
+		int spacing = 18;
+		int totalWidth = hitsplats.size() * spacing;
+
+		int startX = basePoint.getX() - (totalWidth / 2) + (spacing / 2);
+		int xOffset = 0;
+
+		for (VisibilityEnhancer.CustomHitsplat hit : hitsplats)
+		{
+			String text = String.valueOf(hit.getAmount());
+			int textWidth = fm.stringWidth(text);
+
+			int boxWidth = textWidth + (paddingX * 2);
+			int boxHeight = boxTextHeight + (paddingY * 2);
+
+			int boxX = startX + xOffset - (boxWidth / 2);
+			int boxY = basePoint.getY() - (boxHeight / 2) - 5;
+
+			// Desaturated custom colors (softer on the eyes)
+			Color backColor = hit.getAmount() == 0 ? new Color(50, 90, 160, bgAlpha) : new Color(180, 40, 40, bgAlpha);
+			Color outlineColor = new Color(0, 0, 0, alpha);
+			Color textColor = new Color(255, 255, 255, alpha);
+
+			// Draw Background Box (2px rounded corners)
+			graphics.setColor(backColor);
+			graphics.fillRoundRect(boxX, boxY, boxWidth, boxHeight, 2, 2);
+
+			// Draw Black Outline
+			graphics.setColor(outlineColor);
+			graphics.drawRoundRect(boxX, boxY, boxWidth, boxHeight, 2, 2);
+
+			int textDrawX = boxX + paddingX;
+
+			// +1 here actively pushes the text DOWN by 1 pixel so it stops hugging the top border!
+			int textDrawY = boxY + boxTextHeight + paddingY + 1;
+
+			// Draw Text Shadow
+			graphics.setColor(outlineColor);
+			graphics.drawString(text, textDrawX + 1, textDrawY + 1);
+
+			// Draw White Text
+			graphics.setColor(textColor);
+			graphics.drawString(text, textDrawX, textDrawY);
+
+			xOffset += spacing;
+		}
 	}
 
 	private void drawOverheadText(Graphics2D graphics, Player player)
@@ -300,13 +401,11 @@ public class VisibilityEnhancerOverlay extends Overlay
 		switch (icon)
 		{
 			case MELEE: return SpriteID.PRAYER_PROTECT_FROM_MELEE;
-
 			case RANGED: return SpriteID.PRAYER_PROTECT_FROM_MISSILES;
 			case MAGIC: return SpriteID.PRAYER_PROTECT_FROM_MAGIC;
 			case RETRIBUTION: return SpriteID.PRAYER_RETRIBUTION;
 			case SMITE: return SpriteID.PRAYER_SMITE;
 			case REDEMPTION: return SpriteID.PRAYER_REDEMPTION;
-
 			default: return -1;
 		}
 	}

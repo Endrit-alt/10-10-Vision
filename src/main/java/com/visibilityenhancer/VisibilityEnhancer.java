@@ -4,6 +4,7 @@ import com.google.inject.Provides;
 import java.util.*;
 import javax.inject.Inject;
 import lombok.Getter;
+import lombok.AllArgsConstructor;
 import net.runelite.api.*;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.events.*;
@@ -58,6 +59,19 @@ public class VisibilityEnhancer extends Plugin
 	private final Set<Player> currentInRange = new HashSet<>();
 	private final Set<Player> noLongerGhosted = new HashSet<>();
 
+	// --- NEW: Simplified Hitsplat Tracker ---
+	@Getter
+	@AllArgsConstructor
+	public static class CustomHitsplat
+	{
+		private final int amount;
+		private final int despawnTick;
+	}
+
+	@Getter
+	private final Map<Player, List<CustomHitsplat>> customHitsplats = new HashMap<>();
+	// ----------------------------------------
+
 	@Override
 	protected void startUp()
 	{
@@ -89,10 +103,28 @@ public class VisibilityEnhancer extends Plugin
 		originalEquipmentMap.clear();
 		lastInteractionMap.clear();
 		myProjectiles.clear();
+		customHitsplats.clear();
 		inRange.clear();
 		currentInRange.clear();
 		noLongerGhosted.clear();
 		cachedLocalPlayer = null;
+	}
+
+	// --- NEW: Catch hitsplats when they happen ---
+	@Subscribe
+	public void onHitsplatApplied(HitsplatApplied event)
+	{
+		if (event.getActor() instanceof Player)
+		{
+			Player p = (Player) event.getActor();
+			if (config.othersTransparentPrayers() && ghostedPlayers.contains(p))
+			{
+				int amount = event.getHitsplat().getAmount();
+				// A standard hitsplat stays on screen for roughly 4 ticks
+				customHitsplats.computeIfAbsent(p, k -> new ArrayList<>())
+						.add(new CustomHitsplat(amount, client.getTickCount() + 4));
+			}
+		}
 	}
 
 	@Subscribe
@@ -100,18 +132,15 @@ public class VisibilityEnhancer extends Plugin
 	{
 		cachedLocalPlayer = client.getLocalPlayer();
 
-		// Clear impacts off ghosted players if hiding other projectiles
 		if (config.hideOthersProjectiles())
 		{
 			for (Player p : ghostedPlayers)
 			{
-				// Clear the legacy graphic system
 				if (p.getGraphic() != -1)
 				{
 					p.setGraphic(-1);
 				}
 
-				// Clear the modern SpotAnim system
 				if (p.getSpotAnims() != null)
 				{
 					for (ActorSpotAnim spotAnim : p.getSpotAnims())
@@ -162,6 +191,7 @@ public class VisibilityEnhancer extends Plugin
 		ghostedPlayers.remove(p);
 		originalEquipmentMap.remove(p);
 		lastInteractionMap.remove(p);
+		customHitsplats.remove(p);
 	}
 
 	@Subscribe
@@ -213,6 +243,17 @@ public class VisibilityEnhancer extends Plugin
 		}
 
 		myProjectiles.removeIf(p -> client.getGameCycle() >= p.getEndCycle());
+
+		// --- NEW: Cleanup old hitsplats so they disappear from the screen ---
+		if (config.othersTransparentPrayers())
+		{
+			customHitsplats.values().forEach(list ->
+					list.removeIf(h -> client.getTickCount() >= h.getDespawnTick()));
+		}
+		else
+		{
+			customHitsplats.clear();
+		}
 
 		if (config.selfClearGround())
 		{
@@ -357,7 +398,10 @@ public class VisibilityEnhancer extends Plugin
 			return;
 		}
 
-		int selfOpacity = config.selfClearGround() ? 100 : config.selfOpacity();
+		int selfOpacity = (config.selfClearGround() || isLocalRecentlyInPlayerCombat(local))
+				? 100
+				: config.selfOpacity();
+
 		if (selfOpacity < 100)
 		{
 			applyOpacity(local, selfOpacity);
@@ -370,12 +414,10 @@ public class VisibilityEnhancer extends Plugin
 		int othersAlpha = clampAlpha(config.playerOpacity());
 		int myProjAlpha = clampAlpha(config.myProjectileOpacity());
 
-		// Create lists to sort shared models by their highest priority
 		Set<Model> forceOpaque = new HashSet<>();
 		Set<Model> forceMyAlpha = new HashSet<>();
 		Set<Model> forceOthersAlpha = new HashSet<>();
 
-		// Pass 1: Categorize all projectile models on screen
 		for (Projectile proj : client.getProjectiles())
 		{
 			Model m = proj.getModel();
@@ -383,12 +425,10 @@ public class VisibilityEnhancer extends Plugin
 
 			Actor target = proj.getInteracting();
 
-			// Highest Priority: If it targets you or the floor, it MUST be fully visible
 			if (target == local || target == null)
 			{
 				forceOpaque.add(m);
 			}
-			// Second Priority: Projectiles from your own weapon
 			else if (myProjectiles.contains(proj))
 			{
 				if (!forceOpaque.contains(m))
@@ -396,7 +436,6 @@ public class VisibilityEnhancer extends Plugin
 					forceMyAlpha.add(m);
 				}
 			}
-			// Lowest Priority: Ghosted teammates' projectiles
 			else
 			{
 				if (!forceOpaque.contains(m) && !forceMyAlpha.contains(m))
@@ -406,7 +445,6 @@ public class VisibilityEnhancer extends Plugin
 			}
 		}
 
-		// Pass 2: Apply the opacities based on our sorted lists
 		for (Model m : forceOpaque)
 		{
 			byte[] trans = m.getFaceTransparencies();
@@ -451,15 +489,9 @@ public class VisibilityEnhancer extends Plugin
 
 			if (drawingUI)
 			{
-				boolean hideGhostUI = isGhost && config.othersTransparentPrayers();
-				if (hideGhostUI)
+				if (isGhost && config.othersTransparentPrayers())
 				{
-					return false;
-				}
-
-				if (isGhost && config.hideGhostExtras())
-				{
-					return false;
+					return false; // Blocks native HP, Hitsplats, and Prayers
 				}
 			}
 		}
@@ -475,6 +507,24 @@ public class VisibilityEnhancer extends Plugin
 		}
 
 		return (client.getTickCount() - lastInteractionMap.getOrDefault(p, -100)) < INTERACTION_TIMEOUT_TICKS;
+	}
+
+	private boolean isLocalRecentlyInPlayerCombat(Player local)
+	{
+		for (Player p : client.getPlayers())
+		{
+			if (p == null || p == local)
+			{
+				continue;
+			}
+
+			if (isRecentlyInteracting(p, local))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private int getEffectiveOpacity(Player player)
@@ -495,11 +545,9 @@ public class VisibilityEnhancer extends Plugin
 
 	private void applyClothingFilter(Player player)
 	{
-		// --- NEW: Check for a color tint BEFORE altering their clothes ---
 		Model currentModel = player.getModel();
 		if (currentModel != null && currentModel.getOverrideAmount() != 0)
 		{
-			// If they have a tint, restore their clothes and stop the filter from applying
 			restoreClothing(player);
 			return;
 		}
@@ -545,7 +593,6 @@ public class VisibilityEnhancer extends Plugin
 			{
 				int targetOpacity = getEffectiveOpacity(player);
 
-				// Force 100% opacity if they have a full-body tint (Akkha, Monkey Room)
 				if (newModel.getOverrideAmount() != 0)
 				{
 					targetOpacity = 100;
@@ -567,7 +614,6 @@ public class VisibilityEnhancer extends Plugin
 				}
 				else
 				{
-					// If forced to 100, explicitly clear any leftover transparency
 					byte[] trans = newModel.getFaceTransparencies();
 					if (trans != null && trans.length > 0 && (trans[0] & 0xFF) != 0)
 					{
@@ -597,6 +643,26 @@ public class VisibilityEnhancer extends Plugin
 		originalEquipmentMap.remove(player);
 	}
 
+	private boolean hasActiveTint(Model model)
+	{
+		if (model == null)
+		{
+			return false;
+		}
+
+		return model.getOverrideAmount() != 0
+				&& (
+				model.getOverrideHue() != 0
+						|| model.getOverrideSaturation() != 0
+						|| model.getOverrideLuminance() != 0
+		);
+	}
+
+	private boolean isConsuming(Player player)
+	{
+		return player != null && player.getAnimation() == AnimationID.CONSUMING;
+	}
+
 	private void applyOpacity(Player p, int opacityPercent)
 	{
 		Model model = p.getModel();
@@ -605,8 +671,7 @@ public class VisibilityEnhancer extends Plugin
 			return;
 		}
 
-		// If the player has a full-body tint (Akkha, Monkey Room), force 100% opacity
-		if (model.getOverrideAmount() != 0)
+		if (model.getOverrideAmount() != 0 && !isConsuming(p))
 		{
 			restoreOpacity(p);
 			return;
@@ -657,6 +722,7 @@ public class VisibilityEnhancer extends Plugin
 		originalEquipmentMap.clear();
 		lastInteractionMap.clear();
 		myProjectiles.clear();
+		customHitsplats.clear();
 	}
 
 	private int clampAlpha(int opacityPercent)

@@ -119,20 +119,11 @@ public interface VisibilityEnhancerConfig extends Config
 	default boolean hideOthersProjectiles() { return false; }
 
 	@ConfigItem(
-			keyName = "hideGhostExtras",
-			name = "Hide Ghost Overheads/Hits",
+			keyName = "customTransparentPrayers",
+			name = "Transparent Ghost Extras",
 			position = 4,
 			section = extrasSection,
-			description = "Hides overhead prayers and hitsplats for ghosted players"
-	)
-	default boolean hideGhostExtras() { return false; }
-
-	@ConfigItem(
-			keyName = "customTransparentPrayers",
-			name = "Transparent Prayers (Ghosts)",
-			position = 5,
-			section = extrasSection,
-			description = "Hides native overheads and HP bars for ghosts, replacing them with transparent prayer sprites"
+			description = "Hides native overheads, hitsplats, and HP bars for ghosts, replacing overheads with transparent sprites"
 	)
 	default boolean othersTransparentPrayers() { return false; }
 
