@@ -1,6 +1,7 @@
 package com.visibilityenhancer;
 
 import com.google.inject.Provides;
+import com.google.common.collect.ImmutableSet;
 import java.util.*;
 import javax.inject.Inject;
 import lombok.Getter;
@@ -24,8 +25,6 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class VisibilityEnhancer extends Plugin
 {
-	private static final int INTERACTION_TIMEOUT_TICKS = 33;
-
 	@Inject
 	private Client client;
 
@@ -48,7 +47,6 @@ public class VisibilityEnhancer extends Plugin
 	private final Set<Player> ghostedPlayers = new HashSet<>();
 
 	private final Map<Player, int[]> originalEquipmentMap = new HashMap<>();
-	private final Map<Player, Integer> lastInteractionMap = new HashMap<>();
 	private final Set<Projectile> myProjectiles = new HashSet<>();
 
 	private final Hooks.RenderableDrawListener drawListener = this::shouldDraw;
@@ -59,7 +57,25 @@ public class VisibilityEnhancer extends Plugin
 	private final Set<Player> currentInRange = new HashSet<>();
 	private final Set<Player> noLongerGhosted = new HashSet<>();
 
-	// --- NEW: Simplified Hitsplat Tracker ---
+	// --- Exempt Animations for Opacity Override ---
+	private static final Set<Integer> EXEMPT_ANIMATIONS = ImmutableSet.<Integer>builder()
+			.add(AnimationID.CONSUMING) // Protects against CoX Overload / potion damage tints
+			// Melee Specs
+			.add(1378) // DWH Spec
+			.add(7642).add(7643) // BGS Spec
+			.add(7514) // Dragon Claws Spec
+			.add(1062) // Dragon Dagger Spec
+			.add(1203) // Crystal/Dragon Halberd Spec
+			.add(7644).add(7640).add(7638) // AGS, SGS, ZGS Specs
+			.add(10172) // Voidwaker Spec
+			// Ranged Specs
+			.add(5062) // Toxic Blowpipe Spec
+			.add(9168) // Zaryte Crossbow Spec
+			// Magic/Other Specs
+			.add(8104) // Dawnbringer Spec (ToB)
+			.build();
+
+	// --- Simplified Hitsplat Tracker ---
 	@Getter
 	@AllArgsConstructor
 	public static class CustomHitsplat
@@ -101,7 +117,6 @@ public class VisibilityEnhancer extends Plugin
 
 		ghostedPlayers.clear();
 		originalEquipmentMap.clear();
-		lastInteractionMap.clear();
 		myProjectiles.clear();
 		customHitsplats.clear();
 		inRange.clear();
@@ -110,7 +125,6 @@ public class VisibilityEnhancer extends Plugin
 		cachedLocalPlayer = null;
 	}
 
-	// --- NEW: Catch hitsplats when they happen ---
 	@Subscribe
 	public void onHitsplatApplied(HitsplatApplied event)
 	{
@@ -120,7 +134,6 @@ public class VisibilityEnhancer extends Plugin
 			if (config.othersTransparentPrayers() && ghostedPlayers.contains(p))
 			{
 				int amount = event.getHitsplat().getAmount();
-				// A standard hitsplat stays on screen for roughly 4 ticks
 				customHitsplats.computeIfAbsent(p, k -> new ArrayList<>())
 						.add(new CustomHitsplat(amount, client.getTickCount() + 4));
 			}
@@ -157,7 +170,12 @@ public class VisibilityEnhancer extends Plugin
 	{
 		Projectile proj = event.getProjectile();
 
-		if (proj.getStartCycle() != client.getGameCycle())
+		if (myProjectiles.contains(proj))
+		{
+			return;
+		}
+
+		if (client.getGameCycle() > proj.getStartCycle() + 150)
 		{
 			return;
 		}
@@ -178,7 +196,8 @@ public class VisibilityEnhancer extends Plugin
 		int dy = proj.getY1() - lp.getY();
 		int distSq = (dx * dx) + (dy * dy);
 
-		if (distSq < (180 * 180) && local.getAnimation() != -1)
+		// Check if the projectile originated near us AND we are actively doing an animation
+		if (distSq < (192 * 192) && local.getAnimation() != -1)
 		{
 			myProjectiles.add(proj);
 		}
@@ -190,7 +209,6 @@ public class VisibilityEnhancer extends Plugin
 		Player p = event.getPlayer();
 		ghostedPlayers.remove(p);
 		originalEquipmentMap.remove(p);
-		lastInteractionMap.remove(p);
 		customHitsplats.remove(p);
 	}
 
@@ -217,12 +235,6 @@ public class VisibilityEnhancer extends Plugin
 			return;
 		}
 
-		if (isRecentlyInteracting(p, local))
-		{
-			restorePlayer(p);
-			return;
-		}
-
 		if (ghostedPlayers.contains(p))
 		{
 			if (config.othersClearGround())
@@ -244,7 +256,6 @@ public class VisibilityEnhancer extends Plugin
 
 		myProjectiles.removeIf(p -> client.getGameCycle() >= p.getEndCycle());
 
-		// --- NEW: Cleanup old hitsplats so they disappear from the screen ---
 		if (config.othersTransparentPrayers())
 		{
 			customHitsplats.values().forEach(list ->
@@ -275,7 +286,6 @@ public class VisibilityEnhancer extends Plugin
 		currentInRange.clear();
 		noLongerGhosted.clear();
 
-		int currentTick = client.getTickCount();
 		boolean ignoreFriends = config.ignoreFriends();
 		int maxDist = config.proximityRange();
 		int localX = localLoc.getSceneX();
@@ -288,17 +298,9 @@ public class VisibilityEnhancer extends Plugin
 				continue;
 			}
 
-			boolean isInteracting = p.getInteracting() == local || local.getInteracting() == p;
-			if (isInteracting)
-			{
-				lastInteractionMap.put(p, currentTick);
-			}
-
 			boolean isFriend = ignoreFriends && (p.isFriend() || client.isFriended(p.getName(), false));
-			boolean recentlyInteracted =
-					(currentTick - lastInteractionMap.getOrDefault(p, -100)) < INTERACTION_TIMEOUT_TICKS;
 
-			if (isFriend || recentlyInteracted)
+			if (isFriend)
 			{
 				if (ghostedPlayers.contains(p))
 				{
@@ -398,9 +400,7 @@ public class VisibilityEnhancer extends Plugin
 			return;
 		}
 
-		int selfOpacity = (config.selfClearGround() || isLocalRecentlyInPlayerCombat(local))
-				? 100
-				: config.selfOpacity();
+		int selfOpacity = config.selfClearGround() ? 100 : config.selfOpacity();
 
 		if (selfOpacity < 100)
 		{
@@ -445,12 +445,14 @@ public class VisibilityEnhancer extends Plugin
 			}
 		}
 
-		for (Model m : forceOpaque)
+		// --- REVERSED LOOP ORDER ---
+		// Ghost opacity processes first, then your projectiles, then Solid Boss projectiles last!
+		for (Model m : forceOthersAlpha)
 		{
 			byte[] trans = m.getFaceTransparencies();
-			if (trans != null && trans.length > 0 && (trans[0] & 0xFF) != 0)
+			if (trans != null && trans.length > 0 && (trans[0] & 0xFF) != othersAlpha)
 			{
-				Arrays.fill(trans, (byte) 0);
+				Arrays.fill(trans, (byte) othersAlpha);
 			}
 		}
 
@@ -463,12 +465,12 @@ public class VisibilityEnhancer extends Plugin
 			}
 		}
 
-		for (Model m : forceOthersAlpha)
+		for (Model m : forceOpaque)
 		{
 			byte[] trans = m.getFaceTransparencies();
-			if (trans != null && trans.length > 0 && (trans[0] & 0xFF) != othersAlpha)
+			if (trans != null && trans.length > 0 && (trans[0] & 0xFF) != 0)
 			{
-				Arrays.fill(trans, (byte) othersAlpha);
+				Arrays.fill(trans, (byte) 0);
 			}
 		}
 	}
@@ -491,40 +493,12 @@ public class VisibilityEnhancer extends Plugin
 			{
 				if (isGhost && config.othersTransparentPrayers())
 				{
-					return false; // Blocks native HP, Hitsplats, and Prayers
+					return false;
 				}
 			}
 		}
 
 		return true;
-	}
-
-	private boolean isRecentlyInteracting(Player p, Player local)
-	{
-		if (p.getInteracting() == local || local.getInteracting() == p)
-		{
-			return true;
-		}
-
-		return (client.getTickCount() - lastInteractionMap.getOrDefault(p, -100)) < INTERACTION_TIMEOUT_TICKS;
-	}
-
-	private boolean isLocalRecentlyInPlayerCombat(Player local)
-	{
-		for (Player p : client.getPlayers())
-		{
-			if (p == null || p == local)
-			{
-				continue;
-			}
-
-			if (isRecentlyInteracting(p, local))
-			{
-				return true;
-			}
-		}
-
-		return false;
 	}
 
 	private int getEffectiveOpacity(Player player)
@@ -643,24 +617,9 @@ public class VisibilityEnhancer extends Plugin
 		originalEquipmentMap.remove(player);
 	}
 
-	private boolean hasActiveTint(Model model)
+	private boolean isExemptAnimation(Player player)
 	{
-		if (model == null)
-		{
-			return false;
-		}
-
-		return model.getOverrideAmount() != 0
-				&& (
-				model.getOverrideHue() != 0
-						|| model.getOverrideSaturation() != 0
-						|| model.getOverrideLuminance() != 0
-		);
-	}
-
-	private boolean isConsuming(Player player)
-	{
-		return player != null && player.getAnimation() == AnimationID.CONSUMING;
+		return player != null && EXEMPT_ANIMATIONS.contains(player.getAnimation());
 	}
 
 	private void applyOpacity(Player p, int opacityPercent)
@@ -671,7 +630,7 @@ public class VisibilityEnhancer extends Plugin
 			return;
 		}
 
-		if (model.getOverrideAmount() != 0 && !isConsuming(p))
+		if (model.getOverrideAmount() != 0 && !isExemptAnimation(p))
 		{
 			restoreOpacity(p);
 			return;
@@ -720,7 +679,6 @@ public class VisibilityEnhancer extends Plugin
 
 		ghostedPlayers.clear();
 		originalEquipmentMap.clear();
-		lastInteractionMap.clear();
 		myProjectiles.clear();
 		customHitsplats.clear();
 	}

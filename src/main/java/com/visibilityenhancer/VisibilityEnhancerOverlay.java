@@ -7,9 +7,10 @@ import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.Color;
 import java.awt.Polygon;
+import java.awt.Rectangle;
+import java.awt.FontMetrics;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
-
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -32,6 +33,7 @@ import net.runelite.client.ui.overlay.OverlayPriority;
 import net.runelite.client.ui.overlay.outline.ModelOutlineRenderer;
 import net.runelite.client.ui.overlay.OverlayUtil;
 import net.runelite.client.ui.FontManager;
+import net.runelite.client.util.Text;
 
 public class VisibilityEnhancerOverlay extends Overlay
 {
@@ -51,7 +53,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 	private BasicStroke glowStroke;
 
 	private Color cachedColor;
-
 	private Color cachedGlowColor;
 	private Color cachedFillColor;
 
@@ -59,7 +60,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 	private VisibilityEnhancerOverlay(Client client, VisibilityEnhancer plugin, VisibilityEnhancerConfig config, ModelOutlineRenderer modelOutlineRenderer, SpriteManager spriteManager)
 	{
 		this.client = client;
-
 		this.plugin = plugin;
 		this.config = config;
 		this.modelOutlineRenderer = modelOutlineRenderer;
@@ -75,7 +75,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 	{
 		Player local = client.getLocalPlayer();
 		WorldPoint localPoint = local != null ? local.getWorldLocation() : null;
-
 		LocalPoint localLocalPoint = local != null ? local.getLocalLocation() : null;
 
 		if (local != null && config.selfOutline())
@@ -150,9 +149,43 @@ public class VisibilityEnhancerOverlay extends Overlay
 		if (othersCustomPrayers)
 		{
 			Set<WorldPoint> renderedPrayerTiles = new HashSet<>();
+			List<Rectangle> renderedTextBounds = new ArrayList<>(); // Tracks drawn text to prevent overlap
+
+			// --- Track native text from non-ghosted players (like yourself) ---
+			for (Player p : client.getPlayers())
+			{
+				if (p != null && !plugin.getGhostedPlayers().contains(p))
+				{
+					String text = p.getOverheadText();
+					if (text != null && !text.isEmpty())
+					{
+						int zOffset = 20;
+						Point textPoint = p.getCanvasTextLocation(graphics, text, p.getLogicalHeight() + zOffset);
+						if (textPoint != null)
+						{
+							graphics.setFont(FontManager.getRunescapeBoldFont());
+							FontMetrics fontMetrics = graphics.getFontMetrics();
+
+							String cleanText = Text.removeTags(text);
+							int textWidth = fontMetrics.stringWidth(cleanText);
+							int textHeight = fontMetrics.getHeight();
+
+							int drawX = textPoint.getX() - 1;
+							int drawY = textPoint.getY() + 6;
+
+							// Add a bounding box for the native text so our custom text knows to avoid it!
+							renderedTextBounds.add(new Rectangle(drawX, drawY - textHeight, textWidth, textHeight));
+						}
+					}
+				}
+			}
+			// -----------------------------------------------------------------------
 
 			for (Player player : plugin.getGhostedPlayers())
 			{
+				// 1. Always draw overhead text for EVERYONE, regardless of where they stand!
+				drawOverheadText(graphics, player, renderedTextBounds);
+
 				WorldPoint playerPoint = player.getWorldLocation();
 
 				if (playerPoint != null)
@@ -170,11 +203,10 @@ public class VisibilityEnhancerOverlay extends Overlay
 					renderedPrayerTiles.add(playerPoint);
 				}
 
-				// 1. Draw Prayer
+				// 2. Draw Prayer
 				drawTransparentPrayer(graphics, player, config.playerOpacity());
-				drawOverheadText(graphics, player);
 
-				// 2. Draw Simplified HP Bar
+				// 3. Draw Simplified HP Bar
 				int ratio = player.getHealthRatio();
 				int scale = player.getHealthScale();
 				if (ratio > -1 && scale > 0)
@@ -182,7 +214,7 @@ public class VisibilityEnhancerOverlay extends Overlay
 					drawTransparentHpBar(graphics, player, ratio, scale, config.playerOpacity());
 				}
 
-				// 3. Draw Simplified Hitsplats
+				// 4. Draw Simplified Hitsplats
 				List<VisibilityEnhancer.CustomHitsplat> hitsplats = plugin.getCustomHitsplats().get(player);
 				if (hitsplats != null && !hitsplats.isEmpty())
 				{
@@ -279,8 +311,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 		int alpha = (int) ((opacityPercent / 100f) * 255);
 		if (alpha <= 0) return;
 
-		// Revert to using the dynamic 2D overhead calculation so it doesn't clip into the head on different camera tilts!
-		// We use Z-offset of 15 to tuck it cleanly underneath the custom prayer icon.
 		Point point = player.getCanvasTextLocation(graphics, "", player.getLogicalHeight() + 15);
 		if (point == null) return;
 
@@ -306,11 +336,9 @@ public class VisibilityEnhancerOverlay extends Overlay
 
 	private void drawTransparentHitsplats(Graphics2D graphics, Player player, List<VisibilityEnhancer.CustomHitsplat> hitsplats, int opacityPercent)
 	{
-		// Text and outline alpha (0-255)
 		int alpha = (int) ((opacityPercent / 100f) * 255);
 		if (alpha <= 0) return;
 
-		// Background alpha caps at 80% of the text alpha
 		int bgAlpha = (int) (alpha * 0.8f);
 
 		LocalPoint lp = player.getLocalLocation();
@@ -320,63 +348,102 @@ public class VisibilityEnhancerOverlay extends Overlay
 		if (basePoint == null) return;
 
 		graphics.setFont(FontManager.getRunescapeBoldFont().deriveFont(13f));
-		java.awt.FontMetrics fm = graphics.getFontMetrics();
+		FontMetrics fm = graphics.getFontMetrics();
 
-		// Shave 1 pixel off the calculated height to tighten the box vertically
 		int boxTextHeight = fm.getAscent() - 1;
 
-		// Exactly 2 pixels of padding on all sides
 		int paddingX = 2;
 		int paddingY = 2;
 
-		int spacing = 18;
-		int totalWidth = hitsplats.size() * spacing;
+		int boxHeight = boxTextHeight + (paddingY * 2);
+		int ySpacing = boxHeight + 2;
 
-		int startX = basePoint.getX() - (totalWidth / 2) + (spacing / 2);
-		int xOffset = 0;
-
+		int maxTextWidth = 0;
 		for (VisibilityEnhancer.CustomHitsplat hit : hitsplats)
 		{
+			int w = fm.stringWidth(String.valueOf(hit.getAmount()));
+			if (w > maxTextWidth)
+			{
+				maxTextWidth = w;
+			}
+		}
+
+		int maxBoxWidth = maxTextWidth + (paddingX * 2);
+		int xSpacing = maxBoxWidth + 2;
+
+		int size = hitsplats.size();
+
+		for (int i = 0; i < size; i++)
+		{
+			VisibilityEnhancer.CustomHitsplat hit = hitsplats.get(i);
 			String text = String.valueOf(hit.getAmount());
 			int textWidth = fm.stringWidth(text);
-
 			int boxWidth = textWidth + (paddingX * 2);
-			int boxHeight = boxTextHeight + (paddingY * 2);
 
-			int boxX = startX + xOffset - (boxWidth / 2);
-			int boxY = basePoint.getY() - (boxHeight / 2) - 5;
+			int offsetX = 0;
+			int offsetY = 0;
 
-			// Desaturated custom colors (softer on the eyes)
+			if (size == 1)
+			{
+				offsetX = 0;
+				offsetY = 0;
+			}
+			else if (size == 2)
+			{
+				offsetX = 0;
+				offsetY = (i == 0) ? -(ySpacing / 2) : (ySpacing / 2);
+			}
+			else if (size == 4)
+			{
+				// --- NEW: Diamond/Cross shape for exactly 4 hitsplats ---
+				if (i == 0)      { offsetX = 0; offsetY = -ySpacing; }
+				else if (i == 1) { offsetX = -(xSpacing / 2); offsetY = 0; }
+				else if (i == 2) { offsetX = (xSpacing / 2); offsetY = 0; }
+				else if (i == 3) { offsetX = 0; offsetY = ySpacing; }
+			}
+			else
+			{
+				int row = i / 2;
+				int col = i % 2;
+				int totalRows = (size + 1) / 2;
+
+				if (row == totalRows - 1 && size % 2 != 0)
+				{
+					offsetX = 0;
+				}
+				else
+				{
+					offsetX = (col == 0) ? -(xSpacing / 2) : (xSpacing / 2);
+				}
+
+				offsetY = (row * ySpacing) - ((totalRows - 1) * ySpacing / 2);
+			}
+
+			int boxX = basePoint.getX() + offsetX - (boxWidth / 2);
+			int boxY = basePoint.getY() + offsetY - (boxHeight / 2) - 5;
+
 			Color backColor = hit.getAmount() == 0 ? new Color(50, 90, 160, bgAlpha) : new Color(180, 40, 40, bgAlpha);
 			Color outlineColor = new Color(0, 0, 0, alpha);
 			Color textColor = new Color(255, 255, 255, alpha);
 
-			// Draw Background Box (2px rounded corners)
 			graphics.setColor(backColor);
 			graphics.fillRoundRect(boxX, boxY, boxWidth, boxHeight, 2, 2);
 
-			// Draw Black Outline
 			graphics.setColor(outlineColor);
 			graphics.drawRoundRect(boxX, boxY, boxWidth, boxHeight, 2, 2);
 
 			int textDrawX = boxX + paddingX;
-
-			// +1 here actively pushes the text DOWN by 1 pixel so it stops hugging the top border!
 			int textDrawY = boxY + boxTextHeight + paddingY + 1;
 
-			// Draw Text Shadow
 			graphics.setColor(outlineColor);
 			graphics.drawString(text, textDrawX + 1, textDrawY + 1);
 
-			// Draw White Text
 			graphics.setColor(textColor);
 			graphics.drawString(text, textDrawX, textDrawY);
-
-			xOffset += spacing;
 		}
 	}
 
-	private void drawOverheadText(Graphics2D graphics, Player player)
+	private void drawOverheadText(Graphics2D graphics, Player player, List<Rectangle> renderedTextBounds)
 	{
 		String text = player.getOverheadText();
 
@@ -387,12 +454,40 @@ public class VisibilityEnhancerOverlay extends Overlay
 
 		if (textPoint == null) return;
 
+		graphics.setFont(FontManager.getRunescapeBoldFont());
+		FontMetrics fontMetrics = graphics.getFontMetrics();
+
+		// Strip hidden color tags before measuring
+		String cleanText = Text.removeTags(text);
+		int textWidth = fontMetrics.stringWidth(cleanText);
+		int textHeight = fontMetrics.getHeight();
+
 		int drawX = textPoint.getX() - 1;
 		int drawY = textPoint.getY() + 6;
 
+		Rectangle currentBounds = new Rectangle(drawX, drawY - textHeight, textWidth, textHeight);
+
+		boolean isOverlapping = true;
+		while (isOverlapping)
+		{
+			isOverlapping = false;
+			for (Rectangle drawnBounds : renderedTextBounds)
+			{
+				if (currentBounds.intersects(drawnBounds))
+				{
+					drawY -= (textHeight + 2);
+					currentBounds.setLocation(drawX, drawY - textHeight);
+					isOverlapping = true;
+					break;
+				}
+			}
+		}
+
+		renderedTextBounds.add(currentBounds);
+
 		Point adjustedPoint = new Point(drawX, drawY);
 
-		graphics.setFont(FontManager.getRunescapeBoldFont());
+		// Draw the original text so color tags show properly
 		OverlayUtil.renderTextLocation(graphics, adjustedPoint, text, Color.YELLOW);
 	}
 
