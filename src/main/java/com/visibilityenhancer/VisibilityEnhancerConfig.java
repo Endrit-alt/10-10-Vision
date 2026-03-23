@@ -123,9 +123,48 @@ public interface VisibilityEnhancerConfig extends Config
 			name = "Transparent Ghost Extras",
 			position = 4,
 			section = extrasSection,
-			description = "Hides native overheads, hitsplats, and HP bars for ghosts, replacing overheads with transparent sprites"
+			description = "Hides native overheads, hitsplats, and HP bars for ghosts, replacing them with transparent versions"
 	)
 	default boolean othersTransparentPrayers() { return false; }
+
+	@Range(min = 0, max = 100)
+	@ConfigItem(
+			keyName = "prayersOpacity",
+			name = "  ↳ Prayers Opacity",
+			position = 5,
+			section = extrasSection,
+			description = "(Requires 'Transparent Ghost Extras' enabled)<br>Transparency of replaced overhead prayers"
+	)
+	default int prayersOpacity() { return 100; }
+
+	@Range(min = 0, max = 100)
+	@ConfigItem(
+			keyName = "hpBarOpacity",
+			name = "  ↳ HP Bar Opacity",
+			position = 6,
+			section = extrasSection,
+			description = "(Requires 'Transparent Ghost Extras' enabled)<br>Transparency of replaced HP bars"
+	)
+	default int hpBarOpacity() { return 100; }
+
+	@Range(min = 0, max = 100)
+	@ConfigItem(
+			keyName = "hitsplatsOpacity",
+			name = "  ↳ Hitsplats Opacity",
+			position = 7,
+			section = extrasSection,
+			description = "(Requires 'Transparent Ghost Extras' enabled)<br>Transparency of replaced hitsplats"
+	)
+	default int hitsplatsOpacity() { return 100; }
+
+	@ConfigItem(
+			keyName = "hideHitsplatBackground",
+			name = "  ↳ Hide Hitsplat Bg",
+			position = 8,
+			section = extrasSection,
+			description = "(Requires 'Transparent Ghost Extras' enabled)<br>Removes the hitsplat background box completely, showing only the numbers"
+	)
+	default boolean hideHitsplatBackground() { return false; }
 
 
 	// --- OUTLINE SECTION ---

@@ -169,7 +169,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 							String cleanText = Text.removeTags(text);
 							int textWidth = fontMetrics.stringWidth(cleanText);
 							int textHeight = fontMetrics.getHeight();
-
 							int drawX = textPoint.getX() - 1;
 							int drawY = textPoint.getY() + 6;
 
@@ -204,21 +203,21 @@ public class VisibilityEnhancerOverlay extends Overlay
 				}
 
 				// 2. Draw Prayer
-				drawTransparentPrayer(graphics, player, config.playerOpacity());
+				drawTransparentPrayer(graphics, player, config.prayersOpacity());
 
 				// 3. Draw Simplified HP Bar
 				int ratio = player.getHealthRatio();
 				int scale = player.getHealthScale();
 				if (ratio > -1 && scale > 0)
 				{
-					drawTransparentHpBar(graphics, player, ratio, scale, config.playerOpacity());
+					drawTransparentHpBar(graphics, player, ratio, scale, config.hpBarOpacity());
 				}
 
 				// 4. Draw Simplified Hitsplats
 				List<VisibilityEnhancer.CustomHitsplat> hitsplats = plugin.getCustomHitsplats().get(player);
 				if (hitsplats != null && !hitsplats.isEmpty())
 				{
-					drawTransparentHitsplats(graphics, player, hitsplats, config.playerOpacity());
+					drawTransparentHitsplats(graphics, player, hitsplats, config.hitsplatsOpacity());
 				}
 			}
 		}
@@ -238,7 +237,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 	private void renderFloorTile(Graphics2D graphics, Player player, Color color)
 	{
 		Polygon poly = Perspective.getCanvasTilePoly(client, player.getLocalLocation());
-
 		if (poly != null)
 		{
 			if (cachedColor == null || !cachedColor.equals(color))
@@ -300,7 +298,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 		float alpha = opacityPercent / 100f;
 		Composite originalComposite = graphics.getComposite();
 		graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
-
 		graphics.drawImage(prayerImage, drawX, drawY, null);
 
 		graphics.setComposite(originalComposite);
@@ -317,9 +314,8 @@ public class VisibilityEnhancerOverlay extends Overlay
 		int width = 30;
 		int height = 5;
 		int fill = (int) (((float) ratio / scale) * width);
-
 		int x = point.getX() - (width / 2);
-		int y = point.getY();
+		int y = point.getY() - 2;
 
 		// Draw red background
 		graphics.setColor(new Color(255, 0, 0, alpha));
@@ -330,16 +326,20 @@ public class VisibilityEnhancerOverlay extends Overlay
 		graphics.fillRect(x, y, fill, height);
 
 		// Draw black outline
-		graphics.setColor(new Color(0, 0, 0, alpha));
-		graphics.drawRect(x, y, width, height);
+		//graphics.setColor(new Color(0, 0, 0, alpha));
+		//graphics.drawRect(x, y, width, height);
 	}
 
 	private void drawTransparentHitsplats(Graphics2D graphics, Player player, List<VisibilityEnhancer.CustomHitsplat> hitsplats, int opacityPercent)
 	{
 		int alpha = (int) ((opacityPercent / 100f) * 255);
+
+		// If text alpha is 0, don't draw anything at all
 		if (alpha <= 0) return;
 
-		int bgAlpha = (int) (alpha * 0.8f);
+		// If the checkbox is true, force bg and outline alpha to 0 (invisible). Otherwise, use standard scaling.
+		int bgAlpha = config.hideHitsplatBackground() ? 0 : (int) (alpha * 0.8f);
+		int boxOutlineAlpha = config.hideHitsplatBackground() ? 0 : alpha;
 
 		LocalPoint lp = player.getLocalLocation();
 		if (lp == null) return;
@@ -352,11 +352,39 @@ public class VisibilityEnhancerOverlay extends Overlay
 
 		int boxTextHeight = fm.getAscent() - 1;
 
-		int paddingX = 2;
-		int paddingY = 2;
-
+		int paddingX = 1;
+		int paddingY = 1;
 		int boxHeight = boxTextHeight + (paddingY * 2);
 		int ySpacing = boxHeight + 2;
+
+		int size = hitsplats.size();
+
+		// --- NEW LOGIC: Calculate dynamic ceiling based on HP Bar ---
+		int shiftDown = 0;
+		Point hpPoint = player.getCanvasTextLocation(graphics, "", player.getLogicalHeight() + 15);
+		if (hpPoint != null)
+		{
+			int hpBarBottom = (hpPoint.getY() - 2) + 5; // y-2 is HP bar top, 5 is height
+			int ceilingY = hpBarBottom + 2; // Stay at least 2 pixels below bottom of HP bar
+
+			// Predict the Y offset of the highest hitsplat (always index 0)
+			int highestOffsetY = 0;
+			if (size == 2) highestOffsetY = -(ySpacing / 2);
+			else if (size == 4) highestOffsetY = -ySpacing;
+			else if (size > 1) {
+				int totalRows = (size + 1) / 2;
+				highestOffsetY = -((totalRows - 1) * ySpacing / 2);
+			}
+
+			// Where the top edge of our highest hitsplat WANTS to be
+			int highestBoxY = basePoint.getY() + highestOffsetY - (boxHeight / 2) - 10;
+
+			// If it tries to go above the ceiling, calculate how much to push everything down
+			if (highestBoxY < ceilingY) {
+				shiftDown = ceilingY - highestBoxY;
+			}
+		}
+		// -----------------------------------------------------------
 
 		int maxTextWidth = 0;
 		for (VisibilityEnhancer.CustomHitsplat hit : hitsplats)
@@ -368,17 +396,15 @@ public class VisibilityEnhancerOverlay extends Overlay
 			}
 		}
 
-		int maxBoxWidth = maxTextWidth + (paddingX * 2);
+		int maxBoxWidth = maxTextWidth + 1 + (paddingX * 2);
 		int xSpacing = maxBoxWidth + 2;
-
-		int size = hitsplats.size();
 
 		for (int i = 0; i < size; i++)
 		{
 			VisibilityEnhancer.CustomHitsplat hit = hitsplats.get(i);
 			String text = String.valueOf(hit.getAmount());
 			int textWidth = fm.stringWidth(text);
-			int boxWidth = textWidth + (paddingX * 2);
+			int boxWidth = textWidth + 1 + (paddingX * 2);
 
 			int offsetX = 0;
 			int offsetY = 0;
@@ -395,7 +421,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 			}
 			else if (size == 4)
 			{
-				// --- NEW: Diamond/Cross shape for exactly 4 hitsplats ---
 				if (i == 0)      { offsetX = 0; offsetY = -ySpacing; }
 				else if (i == 1) { offsetX = -(xSpacing / 2); offsetY = 0; }
 				else if (i == 2) { offsetX = (xSpacing / 2); offsetY = 0; }
@@ -406,7 +431,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 				int row = i / 2;
 				int col = i % 2;
 				int totalRows = (size + 1) / 2;
-
 				if (row == totalRows - 1 && size % 2 != 0)
 				{
 					offsetX = 0;
@@ -420,38 +444,52 @@ public class VisibilityEnhancerOverlay extends Overlay
 			}
 
 			int boxX = basePoint.getX() + offsetX - (boxWidth / 2);
-			int boxY = basePoint.getY() + offsetY - (boxHeight / 2) - 5;
 
-			Color backColor = hit.getAmount() == 0 ? new Color(50, 90, 160, bgAlpha) : new Color(180, 40, 40, bgAlpha);
-			Color outlineColor = new Color(0, 0, 0, alpha);
-			Color textColor = new Color(255, 255, 255, alpha);
+			// Apply shiftDown here to prevent overlapping the health bar
+			int boxY = basePoint.getY() + offsetY - (boxHeight / 2) - 10 + shiftDown;
 
-			graphics.setColor(backColor);
-			graphics.fillRoundRect(boxX, boxY, boxWidth, boxHeight, 2, 2);
+			// Draw background only if alpha > 0
+			if (bgAlpha > 0)
+			{
+				Color backColor = hit.getAmount() == 0 ?
+						new Color(50, 90, 160, bgAlpha) : new Color(180, 40, 40, bgAlpha);
+				graphics.setColor(backColor);
+				graphics.fillRoundRect(boxX, boxY, boxWidth, boxHeight, 2, 2);
+			}
 
-			graphics.setColor(outlineColor);
-			graphics.drawRoundRect(boxX, boxY, boxWidth, boxHeight, 2, 2);
+			// Draw box outline only if alpha > 0
+			//if (boxOutlineAlpha > 0)
+			//{
+			// Color outlineColor = new Color(0, 0, 0, boxOutlineAlpha);
+			// graphics.setColor(outlineColor);
+			// graphics.drawRoundRect(boxX, boxY, boxWidth, boxHeight, 2, 2);
+			//}
 
 			int textDrawX = boxX + paddingX;
 			int textDrawY = boxY + boxTextHeight + paddingY + 1;
 
-			graphics.setColor(outlineColor);
-			graphics.drawString(text, textDrawX + 1, textDrawY + 1);
+			// Draw text and its black drop shadow (shadow always uses the text's alpha)
+			if (alpha > 0)
+			{
+				Color textShadowColor = new Color(0, 0, 0, alpha);
+				Color textColor = new Color(255, 255, 255, alpha);
 
-			graphics.setColor(textColor);
-			graphics.drawString(text, textDrawX, textDrawY);
+				graphics.setColor(textShadowColor);
+				graphics.drawString(text, textDrawX + 1, textDrawY + 1);
+
+				graphics.setColor(textColor);
+				graphics.drawString(text, textDrawX, textDrawY);
+			}
 		}
 	}
 
 	private void drawOverheadText(Graphics2D graphics, Player player, List<Rectangle> renderedTextBounds)
 	{
 		String text = player.getOverheadText();
-
 		if (text == null || text.isEmpty()) return;
 
 		int zOffset = 20;
 		Point textPoint = player.getCanvasTextLocation(graphics, text, player.getLogicalHeight() + zOffset);
-
 		if (textPoint == null) return;
 
 		graphics.setFont(FontManager.getRunescapeBoldFont());
