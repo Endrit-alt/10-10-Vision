@@ -95,18 +95,9 @@ public interface VisibilityEnhancerConfig extends Config
 	String extrasSection = "extrasSection";
 
 	@ConfigItem(
-			keyName = "hideStackedOutlines",
-			name = "Hide Stacked Highlights",
-			position = 1,
-			section = extrasSection,
-			description = "Only shows one highlight per tile if players are standing on each other"
-	)
-	default boolean hideStackedOutlines() { return true; }
-
-	@ConfigItem(
 			keyName = "selfClearGround",
 			name = "Clear Ground (Self)",
-			position = 2,
+			position = 1,
 			section = extrasSection,
 			description = "Hides your Cape, Shield, Legs, and Boots to see ground markers better."
 	)
@@ -115,7 +106,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "othersClearGround",
 			name = "Clear Ground (Others)",
-			position = 3,
+			position = 2,
 			section = extrasSection,
 			description = "Hides Cape, Shield, Legs, and Boots on nearby affected players."
 	)
@@ -124,7 +115,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "hideOthersProjectiles",
 			name = "Hide Others' Projectiles",
-			position = 4,
+			position = 3,
 			section = extrasSection,
 			description = "Completely hides projectiles that didn't come from you"
 	)
@@ -133,7 +124,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "customTransparentPrayers",
 			name = "Transparent Others Extras",
-			position = 5,
+			position = 4,
 			section = extrasSection,
 			description = "Hides native overheads, hitsplats, and HP bars for others, replacing them with transparent versions"
 	)
@@ -144,38 +135,38 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "prayersOpacity",
 			name = "  ↳ Prayers Opacity",
-			position = 6,
+			position = 5,
 			section = extrasSection,
 			description = "(Requires 'Transparent Others Extras' enabled)<br>Transparency of replaced overhead prayers"
 	)
-	default int prayersOpacity() { return 100; }
+	default int prayersOpacity() { return 10; }
 
 	@Range(min = 0, max = 100)
 	@Units(Units.PERCENT)
 	@ConfigItem(
 			keyName = "hpBarOpacity",
 			name = "  ↳ HP Bar Opacity",
-			position = 7,
+			position = 6,
 			section = extrasSection,
 			description = "(Requires 'Transparent Others Extras' enabled)<br>Transparency of replaced HP bars"
 	)
-	default int hpBarOpacity() { return 100; }
+	default int hpBarOpacity() { return 10; }
 
 	@Range(min = 0, max = 100)
 	@Units(Units.PERCENT)
 	@ConfigItem(
 			keyName = "hitsplatsOpacity",
 			name = "  ↳ Hitsplats Opacity",
-			position = 8,
+			position = 7,
 			section = extrasSection,
 			description = "(Requires 'Transparent Others Extras' enabled)<br>Transparency of replaced hitsplats"
 	)
-	default int hitsplatsOpacity() { return 100; }
+	default int hitsplatsOpacity() { return 10; }
 
 	@ConfigItem(
 			keyName = "hideHitsplatBackground",
 			name = "  ↳ Hide Hitsplat Bg",
-			position = 9,
+			position = 8,
 			section = extrasSection,
 			description = "(Requires 'Transparent Others Extras' enabled)<br>Removes the hitsplat background box completely, showing only the numbers"
 	)
@@ -184,7 +175,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "hideThralls",
 			name = "Hide Thralls",
-			position = 10,
+			position = 9,
 			section = extrasSection,
 			description = "Completely hides all Arceeus thralls"
 	)
@@ -200,9 +191,18 @@ public interface VisibilityEnhancerConfig extends Config
 	String outlineSection = "outlineSection";
 
 	@ConfigItem(
+			keyName = "hideStackedOutlines",
+			name = "Hide Stacked Highlights",
+			position = 1,
+			section = outlineSection,
+			description = "Only shows one highlight per tile if players are standing on each other"
+	)
+	default boolean hideStackedOutlines() { return true; }
+
+	@ConfigItem(
 			keyName = "highlightSelf",
 			name = "Highlight Myself",
-			position = 1,
+			position = 2,
 			section = outlineSection,
 			description = "Choose how to highlight your own character"
 	)
@@ -212,7 +212,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "selfOutlineColor",
 			name = "My Highlight Color",
-			position = 2,
+			position = 3,
 			section = outlineSection,
 			description = "The color of your own highlight"
 	)
@@ -221,7 +221,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "highlightOthers",
 			name = "Highlight Others",
-			position = 3,
+			position = 4,
 			section = outlineSection,
 			description = "Choose how to highlight nearby affected players"
 	)
@@ -231,7 +231,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "othersOutlineColor",
 			name = "Others Highlight Color",
-			position = 4,
+			position = 5,
 			section = outlineSection,
 			description = "The color of other players' highlights"
 	)
@@ -240,7 +240,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "highlightThralls",
 			name = "Highlight Thralls",
-			position = 5,
+			position = 6,
 			section = outlineSection,
 			description = "Choose how to highlight Arceeus thralls"
 	)
@@ -250,7 +250,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "thrallsOutlineColor",
 			name = "Thralls Highlight Color",
-			position = 6,
+			position = 7,
 			section = outlineSection,
 			description = "The color of thrall highlights"
 	)
