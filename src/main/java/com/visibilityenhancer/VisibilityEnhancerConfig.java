@@ -427,6 +427,9 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(keyName = "coxOlm", name = "The Great Olm", section = coxSection, position = 1, description = "Static region check for Olm.")
 	default boolean coxOlm() { return true; }
 
+	@ConfigItem(keyName = "coxRest", name = "Rest of Raid", section = coxSection, position = 2, description = "Enable in the rest of Chambers of Xeric (Upper, Middle, Lower floors)")
+	default boolean coxRest() { return true; }
+
 	// --- OTHER BOSSES ---
 	@ConfigSection(name = "Other Bosses", description = "Other Boss Rooms", position = 54)
 	String otherSection = "otherSection";

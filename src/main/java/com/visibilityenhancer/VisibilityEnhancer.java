@@ -200,6 +200,8 @@ public class VisibilityEnhancer extends Plugin
 
             // CoX
             case 12889: return config.coxOlm();
+            case 13136: case 13137: case 13138:
+            case 13139: case 13140: case 13141: return config.coxRest();
 
             // Other Bosses
             case 11601: return config.otherNex();
