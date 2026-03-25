@@ -23,6 +23,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.util.HotkeyListener;
+import net.runelite.api.coords.WorldPoint;
 
 @PluginDescriptor(
         name = "Raids Visibility Enhancer",
@@ -176,39 +177,48 @@ public class VisibilityEnhancer extends Plugin
 
       if (!config.enableAreaFiltering()) return true;
 
-      int[] regions = client.getMapRegions();
-      if (regions == null) return false;
+      Player local = client.getLocalPlayer();
+      if (local == null) return false;
 
-      for (int regionId : regions)
+      LocalPoint lp = local.getLocalLocation();
+      if (lp == null) return false;
+
+      // Gets the exact template region the player is standing on,
+      // ignoring other regions loaded nearby in the instance.
+      int regionId = WorldPoint.fromLocalInstance(client, lp).getRegionID();
+
+      switch (regionId)
       {
-         switch (regionId)
-         {
-            // ToB
-            case 12613: return config.tobMaiden();
-            case 13125: return config.tobBloat();
-            case 13122: return config.tobNylo();
-            case 13123: case 13379: return config.tobSote();
-            case 12612: return config.tobXarpus();
-            case 12611: return config.tobVerzik();
+         // ToB
+         case 12613: return config.tobMaiden();
+         case 13125: return config.tobBloat();
+         case 13122: return config.tobNylo();
+         case 13123: case 13379: return config.tobSote();
+         case 12612: return config.tobXarpus();
+         case 12611: return config.tobVerzik();
 
-            // ToA
-            case 15700: return config.toaZebak();
-            case 14164: return config.toaKephri();
-            case 14676: return config.toaAkkha();
-            case 15188: return config.toaBaba();
-            case 15184: case 15696: return config.toaWardens();
+         // ToA
+         case 15700: return config.toaZebak();
+         case 14164: return config.toaKephri();
+         case 14676: return config.toaAkkha();
+         case 15188: return config.toaBaba();
+         case 15184: case 15696: return config.toaWardens();
 
-            // CoX
-            case 12889: return config.coxOlm();
-            case 13136: case 13137: case 13138:
-            case 13139: case 13140: case 13141: return config.coxRest();
+         // CoX
+         case 12889: return config.coxOlm();
 
-            // Other Bosses
-            case 11601: return config.otherNex();
-            case 15515: return config.otherNightmare();
-            case 11827: case 11828: case 12084: return config.otherRoyalTitans();
-         }
+         // Other Bosses
+         case 11601: return config.otherNex();
+         case 15515: return config.otherNightmare();
+         case 11827: case 11828: case 12084: return config.otherRoyalTitans();
       }
+
+      // If they are inside Chambers of Xeric (Varbit 5432) but NOT in Olm (checked above)
+      if (client.getVarbitValue(Varbits.IN_RAID) == 1)
+      {
+         return config.coxRest();
+      }
+
       return false;
    }
 
@@ -337,9 +347,12 @@ public class VisibilityEnhancer extends Plugin
    @Subscribe
    public void onConfigChanged(ConfigChanged event)
    {
-      if (event.getGroup().equals("visibilityenhancer") && event.getKey().equals("selfClearGround"))
+      if (event.getGroup().equals("visibilityenhancer"))
       {
-         if (!config.selfClearGround())
+         // Instantly check for toggles instead of waiting for the next game tick
+         clientThread.invokeLater(this::checkStateTransition);
+
+         if (event.getKey().equals("selfClearGround") && !config.selfClearGround())
          {
             clientThread.invokeLater(() ->
             {
@@ -347,6 +360,8 @@ public class VisibilityEnhancer extends Plugin
                if (local != null)
                {
                   restoreClothing(local);
+                  PlayerComposition comp = local.getPlayerComposition();
+                  if (comp != null) comp.setHash(); // Force cache update
                }
             });
          }
@@ -356,15 +371,10 @@ public class VisibilityEnhancer extends Plugin
    @Subscribe
    public void onGameTick(GameTick event)
    {
-      boolean currentlyActive = isActive();
+      // Replaces the old wasActive logic
+      checkStateTransition();
 
-      if (wasActive && !currentlyActive)
-      {
-         clearAllGhosting();
-      }
-      wasActive = currentlyActive;
-
-      if (!currentlyActive) return;
+      if (!isActive()) return;
 
       Player local = client.getLocalPlayer();
       if (local == null)
@@ -494,6 +504,9 @@ public class VisibilityEnhancer extends Plugin
    {
       if (!isActive()) return;
 
+      // Mark as active so the plugin knows it MUST clean up if toggled off immediately
+      wasActive = true;
+
       Player local = client.getLocalPlayer();
       if (local == null) return;
 
@@ -595,6 +608,18 @@ public class VisibilityEnhancer extends Plugin
       if (player == null || local == null) return 100;
       if (player == local) return config.selfClearGround() ? 100 : config.selfOpacity();
       return config.othersClearGround() ? 100 : config.playerOpacity();
+   }
+
+   private void checkStateTransition()
+   {
+      boolean currentlyActive = isActive();
+
+      if (wasActive && !currentlyActive)
+      {
+         clearAllGhosting();
+      }
+
+      wasActive = currentlyActive;
    }
 
    private void applyClothingFilter(Player player)
@@ -719,6 +744,13 @@ public class VisibilityEnhancer extends Plugin
    {
       restoreOpacity(p);
       restoreClothing(p);
+
+      // Forces OSRS to delete the transparent cached model and rebuild it
+      PlayerComposition comp = p.getPlayerComposition();
+      if (comp != null)
+      {
+         comp.setHash();
+      }
    }
 
    private void clearAllGhosting()
