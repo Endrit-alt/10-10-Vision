@@ -725,6 +725,13 @@ public class VisibilityEnhancer extends Plugin
       Set<Player> allAffected = new HashSet<>(ghostedPlayers);
       allAffected.addAll(originalEquipmentMap.keySet());
 
+      // FIX: Explicitly add the local player to the cleanup set
+      Player local = client.getLocalPlayer();
+      if (local != null)
+      {
+         allAffected.add(local);
+      }
+
       for (Player p : allAffected)
       {
          restorePlayer(p);
