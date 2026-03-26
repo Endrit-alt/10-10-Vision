@@ -233,6 +233,13 @@ public class VisibilityEnhancer extends Plugin
          if (config.othersTransparentPrayers() && ghostedPlayers.contains(p))
          {
             int amount = event.getHitsplat().getAmount();
+
+            // If the hitsplat is a 0 and the user wants to hide them, drop it immediately
+            if (amount == 0 && config.hideZeroHitsplats())
+            {
+               return;
+            }
+
             customHitsplats.computeIfAbsent(p, k -> new ArrayList<>())
                     .add(new CustomHitsplat(amount, client.getTickCount() + 4));
          }

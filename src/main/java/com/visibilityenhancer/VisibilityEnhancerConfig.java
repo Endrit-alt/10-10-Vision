@@ -173,6 +173,15 @@ public interface VisibilityEnhancerConfig extends Config
 	default boolean hideHitsplatBackground() { return false; }
 
 	@ConfigItem(
+			keyName = "hideZeroHitsplats",
+			name = "  ↳ Hide 0 Hitsplats",
+			position = 9,
+			section = extrasSection,
+			description = "(Requires 'Transparent Others Extras' enabled)<br>Completely hides hitsplats on others that deal 0 damage"
+	)
+	default boolean hideZeroHitsplats() { return false; }
+
+	@ConfigItem(
 			keyName = "hideThralls",
 			name = "Hide Thralls",
 			position = 9,
