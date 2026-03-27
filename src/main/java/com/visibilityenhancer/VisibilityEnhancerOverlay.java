@@ -9,6 +9,7 @@ import java.awt.Color;
 import java.awt.Polygon;
 import java.awt.Rectangle;
 import java.awt.FontMetrics;
+import java.awt.Stroke;
 import java.awt.image.BufferedImage;
 import java.time.Duration;
 import java.time.Instant;
@@ -53,15 +54,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 
 	private final Set<WorldPoint> renderedTiles = new HashSet<>();
 	private final List<Player> sortedGhosts = new ArrayList<>(32);
-
-	private int cachedOutlineWidth = -1;
-	private int cachedGlowWidth = -1;
-	private BasicStroke primaryStroke;
-	private BasicStroke glowStroke;
-
-	private Color cachedColor;
-	private Color cachedGlowColor;
-	private Color cachedFillColor;
 
 	// --- Spam Tracker Variables ---
 	private static final int MESSAGE_DISPLAY_DURATION_MS = 4000; // 4 seconds natural display time
@@ -125,11 +117,11 @@ public class VisibilityEnhancerOverlay extends Overlay
 			{
 				if (npc != null && VisibilityEnhancer.THRALL_IDS.contains(npc.getId()))
 				{
-					if (thrallStyle == HighlightStyle.TILE)
+					if (thrallStyle == HighlightStyle.TILE || thrallStyle == HighlightStyle.TRUE_TILE || thrallStyle == HighlightStyle.BOTH)
 					{
-						renderFloorTile(graphics, npc, thrallsColor);
+						renderFloorTile(graphics, npc, thrallsColor, thrallStyle);
 					}
-					else if (thrallStyle == HighlightStyle.OUTLINE)
+					if (thrallStyle == HighlightStyle.OUTLINE || thrallStyle == HighlightStyle.BOTH)
 					{
 						renderOutlineLayers(npc, thrallsColor);
 					}
@@ -144,11 +136,11 @@ public class VisibilityEnhancerOverlay extends Overlay
 			Model localModel = local.getModel();
 			if (localModel == null || localModel.getOverrideAmount() == 0)
 			{
-				if (selfStyle == HighlightStyle.TILE)
+				if (selfStyle == HighlightStyle.TILE || selfStyle == HighlightStyle.TRUE_TILE || selfStyle == HighlightStyle.BOTH)
 				{
-					renderFloorTile(graphics, local, config.selfOutlineColor());
+					renderFloorTile(graphics, local, config.selfOutlineColor(), selfStyle);
 				}
-				else if (selfStyle == HighlightStyle.OUTLINE)
+				if (selfStyle == HighlightStyle.OUTLINE || selfStyle == HighlightStyle.BOTH)
 				{
 					renderOutlineLayers(local, config.selfOutlineColor());
 				}
@@ -196,11 +188,11 @@ public class VisibilityEnhancerOverlay extends Overlay
 					renderedTiles.add(playerPoint);
 				}
 
-				if (othersStyle == HighlightStyle.TILE)
+				if (othersStyle == HighlightStyle.TILE || othersStyle == HighlightStyle.TRUE_TILE || othersStyle == HighlightStyle.BOTH)
 				{
-					renderFloorTile(graphics, player, othersColor);
+					renderFloorTile(graphics, player, othersColor, othersStyle);
 				}
-				else if (othersStyle == HighlightStyle.OUTLINE)
+				if (othersStyle == HighlightStyle.OUTLINE || othersStyle == HighlightStyle.BOTH)
 				{
 					renderOutlineLayers(player, othersColor);
 				}
@@ -289,7 +281,10 @@ public class VisibilityEnhancerOverlay extends Overlay
 		{
 			modelOutlineRenderer.drawOutline(player, config.glowWidth(), color, config.glowFeather());
 		}
-		modelOutlineRenderer.drawOutline(player, config.outlineWidth(), color, config.outlineFeather());
+		if (config.enableOutline())
+		{
+			modelOutlineRenderer.drawOutline(player, config.outlineWidth(), color, config.outlineFeather());
+		}
 	}
 
 	private void renderOutlineLayers(NPC npc, Color color)
@@ -298,47 +293,59 @@ public class VisibilityEnhancerOverlay extends Overlay
 		{
 			modelOutlineRenderer.drawOutline(npc, config.glowWidth(), color, config.glowFeather());
 		}
-		modelOutlineRenderer.drawOutline(npc, config.outlineWidth(), color, config.outlineFeather());
+		if (config.enableOutline())
+		{
+			modelOutlineRenderer.drawOutline(npc, config.outlineWidth(), color, config.outlineFeather());
+		}
 	}
 
-	private void renderFloorTile(Graphics2D graphics, Actor actor, Color color)
+	private void renderFloorTile(Graphics2D graphics, Actor actor, Color color, HighlightStyle style)
 	{
-		Polygon poly = Perspective.getCanvasTilePoly(client, actor.getLocalLocation());
+		LocalPoint lp = actor.getLocalLocation();
+
+		if (style == HighlightStyle.TRUE_TILE)
+		{
+			WorldPoint wp = actor.getWorldLocation();
+			if (wp != null)
+			{
+				lp = LocalPoint.fromWorld(client, wp);
+			}
+		}
+
+		if (lp == null) return;
+
+		Polygon poly = Perspective.getCanvasTilePoly(client, lp);
 		if (poly != null)
 		{
-			if (cachedColor == null || !cachedColor.equals(color))
+			Stroke primaryStroke;
+			if (config.borderDashed())
 			{
-				cachedColor = color;
-				cachedGlowColor = new Color(color.getRed(), color.getGreen(), color.getBlue(), Math.max(0, color.getAlpha() - 100));
-				cachedFillColor = new Color(color.getRed(), color.getGreen(), color.getBlue(), 50);
+				primaryStroke = new BasicStroke(config.outlineWidth(), BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, new float[]{10.0f, 10.0f}, 0.0f);
 			}
-
-			if (cachedOutlineWidth != config.outlineWidth())
+			else
 			{
-				cachedOutlineWidth = config.outlineWidth();
-				primaryStroke = new BasicStroke(cachedOutlineWidth);
-			}
-
-			if (cachedGlowWidth != config.glowWidth() || cachedOutlineWidth != config.outlineWidth())
-			{
-				cachedGlowWidth = config.glowWidth();
-				glowStroke = new BasicStroke(cachedOutlineWidth + cachedGlowWidth);
+				primaryStroke = new BasicStroke(config.outlineWidth());
 			}
 
 			if (config.enableGlow())
 			{
-				graphics.setColor(cachedGlowColor);
+				Stroke glowStroke = new BasicStroke(config.outlineWidth() + config.glowWidth());
+				Color glowColor = new Color(color.getRed(), color.getGreen(), color.getBlue(), Math.max(0, color.getAlpha() - 100));
+				graphics.setColor(glowColor);
 				graphics.setStroke(glowStroke);
 				graphics.draw(poly);
 			}
 
-			graphics.setColor(cachedColor);
-			graphics.setStroke(primaryStroke);
-			graphics.draw(poly);
+			if (config.enableOutline())
+			{
+				graphics.setColor(color);
+				graphics.setStroke(primaryStroke);
+				graphics.draw(poly);
+			}
 
 			if (config.fillFloorTile())
 			{
-				graphics.setColor(cachedFillColor);
+				graphics.setColor(config.tileFillColor());
 				graphics.fill(poly);
 			}
 		}

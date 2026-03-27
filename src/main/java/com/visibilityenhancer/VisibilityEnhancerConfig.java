@@ -283,11 +283,20 @@ public interface VisibilityEnhancerConfig extends Config
 	)
 	String styleSection = "styleSection";
 
+	@ConfigItem(
+			keyName = "enableOutline",
+			name = "Add Primary Line",
+			position = 1,
+			section = styleSection,
+			description = "Draws the primary, solid outline or tile border"
+	)
+	default boolean enableOutline() { return true; }
+
 	@Range(min = 1, max = 10)
 	@ConfigItem(
 			keyName = "outlineWidth",
 			name = "Line Thickness",
-			position = 1,
+			position = 2,
 			section = styleSection,
 			description = "Thickness of the primary outline"
 	)
@@ -297,16 +306,25 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "outlineFeather",
 			name = "Line Blur (Feather)",
-			position = 2,
+			position = 3,
 			section = styleSection,
 			description = "How soft the edges of the primary line are"
 	)
 	default int outlineFeather() { return 0; }
 
 	@ConfigItem(
+			keyName = "borderDashed",
+			name = "Dashed Tile Border",
+			position = 4,
+			section = styleSection,
+			description = "Makes the line dashed instead of solid for Tiles."
+	)
+	default boolean borderDashed() { return false; }
+
+	@ConfigItem(
 			keyName = "enableGlow",
 			name = "Add Outer Glow",
-			position = 3,
+			position = 5,
 			section = styleSection,
 			description = "Adds a secondary, wider blurred layer behind the primary line"
 	)
@@ -316,7 +334,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "glowWidth",
 			name = "Glow Thickness",
-			position = 4,
+			position = 6,
 			section = styleSection,
 			description = "Width of the glow layer"
 	)
@@ -326,7 +344,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "glowFeather",
 			name = "Glow Blur",
-			position = 5,
+			position = 7,
 			section = styleSection,
 			description = "Softness/Feathering of the glow layer"
 	)
@@ -334,12 +352,22 @@ public interface VisibilityEnhancerConfig extends Config
 
 	@ConfigItem(
 			keyName = "fillFloorTile",
-			name = "Fill Floor Tile",
-			position = 6,
+			name = "Fill Tile",
+			position = 8,
 			section = styleSection,
-			description = "Fills the inside of the floor tile if a 'Tile' highlight is selected"
+			description = "Fills the inside of the floor tile"
 	)
 	default boolean fillFloorTile() { return false; }
+
+	@Alpha
+	@ConfigItem(
+			keyName = "tileFillColor",
+			name = "Fill Color",
+			position = 9,
+			section = styleSection,
+			description = "Color and opacity of the tile interior"
+	)
+	default Color tileFillColor() { return new Color(0, 0, 0, 50); }
 
 	// --- HOTKEY SECTION ---
 	@ConfigSection(
