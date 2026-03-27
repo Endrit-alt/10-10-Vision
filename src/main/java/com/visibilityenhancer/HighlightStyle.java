@@ -6,5 +6,6 @@ public enum HighlightStyle
 	TILE,
 	TRUE_TILE,
 	BOTH,
+	BOTH_TRUE,
 	NONE;
 }

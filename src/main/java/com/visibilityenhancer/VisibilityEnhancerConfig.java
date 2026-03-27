@@ -313,18 +313,9 @@ public interface VisibilityEnhancerConfig extends Config
 	default int outlineFeather() { return 0; }
 
 	@ConfigItem(
-			keyName = "borderDashed",
-			name = "Dashed Tile Border",
-			position = 4,
-			section = styleSection,
-			description = "Makes the line dashed instead of solid for Tiles."
-	)
-	default boolean borderDashed() { return false; }
-
-	@ConfigItem(
 			keyName = "enableGlow",
 			name = "Add Outer Glow",
-			position = 5,
+			position = 4,
 			section = styleSection,
 			description = "Adds a secondary, wider blurred layer behind the primary line"
 	)
@@ -334,7 +325,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "glowWidth",
 			name = "Glow Thickness",
-			position = 6,
+			position = 5,
 			section = styleSection,
 			description = "Width of the glow layer"
 	)
@@ -344,7 +335,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "glowFeather",
 			name = "Glow Blur",
-			position = 7,
+			position = 6,
 			section = styleSection,
 			description = "Softness/Feathering of the glow layer"
 	)
@@ -353,7 +344,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "fillFloorTile",
 			name = "Fill Tile",
-			position = 8,
+			position = 7,
 			section = styleSection,
 			description = "Fills the inside of the floor tile"
 	)
@@ -368,6 +359,15 @@ public interface VisibilityEnhancerConfig extends Config
 			description = "Color and opacity of the tile interior"
 	)
 	default Color tileFillColor() { return new Color(0, 0, 0, 50); }
+
+	@ConfigItem(
+			keyName = "borderDashed",
+			name = "Dashed Tile Border",
+			position = 8,
+			section = styleSection,
+			description = "Makes the line dashed instead of solid for Tiles and True Tiles."
+	)
+	default boolean borderDashed() { return false; }
 
 	// --- HOTKEY SECTION ---
 	@ConfigSection(

@@ -117,11 +117,11 @@ public class VisibilityEnhancerOverlay extends Overlay
 			{
 				if (npc != null && VisibilityEnhancer.THRALL_IDS.contains(npc.getId()))
 				{
-					if (thrallStyle == HighlightStyle.TILE || thrallStyle == HighlightStyle.TRUE_TILE || thrallStyle == HighlightStyle.BOTH)
+					if (thrallStyle == HighlightStyle.TILE || thrallStyle == HighlightStyle.TRUE_TILE || thrallStyle == HighlightStyle.BOTH || thrallStyle == HighlightStyle.BOTH_TRUE)
 					{
 						renderFloorTile(graphics, npc, thrallsColor, thrallStyle);
 					}
-					if (thrallStyle == HighlightStyle.OUTLINE || thrallStyle == HighlightStyle.BOTH)
+					if (thrallStyle == HighlightStyle.OUTLINE || thrallStyle == HighlightStyle.BOTH || thrallStyle == HighlightStyle.BOTH_TRUE)
 					{
 						renderOutlineLayers(npc, thrallsColor);
 					}
@@ -136,11 +136,11 @@ public class VisibilityEnhancerOverlay extends Overlay
 			Model localModel = local.getModel();
 			if (localModel == null || localModel.getOverrideAmount() == 0)
 			{
-				if (selfStyle == HighlightStyle.TILE || selfStyle == HighlightStyle.TRUE_TILE || selfStyle == HighlightStyle.BOTH)
+				if (selfStyle == HighlightStyle.TILE || selfStyle == HighlightStyle.TRUE_TILE || selfStyle == HighlightStyle.BOTH || selfStyle == HighlightStyle.BOTH_TRUE)
 				{
 					renderFloorTile(graphics, local, config.selfOutlineColor(), selfStyle);
 				}
-				if (selfStyle == HighlightStyle.OUTLINE || selfStyle == HighlightStyle.BOTH)
+				if (selfStyle == HighlightStyle.OUTLINE || selfStyle == HighlightStyle.BOTH || selfStyle == HighlightStyle.BOTH_TRUE)
 				{
 					renderOutlineLayers(local, config.selfOutlineColor());
 				}
@@ -188,11 +188,11 @@ public class VisibilityEnhancerOverlay extends Overlay
 					renderedTiles.add(playerPoint);
 				}
 
-				if (othersStyle == HighlightStyle.TILE || othersStyle == HighlightStyle.TRUE_TILE || othersStyle == HighlightStyle.BOTH)
+				if (othersStyle == HighlightStyle.TILE || othersStyle == HighlightStyle.TRUE_TILE || othersStyle == HighlightStyle.BOTH || othersStyle == HighlightStyle.BOTH_TRUE)
 				{
 					renderFloorTile(graphics, player, othersColor, othersStyle);
 				}
-				if (othersStyle == HighlightStyle.OUTLINE || othersStyle == HighlightStyle.BOTH)
+				if (othersStyle == HighlightStyle.OUTLINE || othersStyle == HighlightStyle.BOTH || othersStyle == HighlightStyle.BOTH_TRUE)
 				{
 					renderOutlineLayers(player, othersColor);
 				}
@@ -303,7 +303,7 @@ public class VisibilityEnhancerOverlay extends Overlay
 	{
 		LocalPoint lp = actor.getLocalLocation();
 
-		if (style == HighlightStyle.TRUE_TILE)
+		if (style == HighlightStyle.TRUE_TILE || style == HighlightStyle.BOTH_TRUE)
 		{
 			WorldPoint wp = actor.getWorldLocation();
 			if (wp != null)
