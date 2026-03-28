@@ -1,29 +1,29 @@
 package com.visibilityenhancer;
 
-import com.google.inject.Provides;
 import com.google.common.collect.ImmutableSet;
+import com.google.inject.Provides;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import javax.inject.Inject;
-import lombok.Getter;
 import lombok.AllArgsConstructor;
+import lombok.Getter;
 import net.runelite.api.*;
-import net.runelite.api.gameval.NpcID;
 import net.runelite.api.coords.LocalPoint;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.*;
+import net.runelite.api.gameval.NpcID;
 import net.runelite.api.kit.KitType;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.callback.Hooks;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
-import net.runelite.client.input.KeyManager;
 import net.runelite.client.util.HotkeyListener;
-import net.runelite.api.coords.WorldPoint;
 
 @PluginDescriptor(
         name = "Raids Visibility Enhancer",
@@ -33,6 +33,7 @@ import net.runelite.api.coords.WorldPoint;
 public class VisibilityEnhancer extends Plugin
 {
    private static final int OVERRIDE_OPAQUE_DELAY_CYCLES = 2;
+   private static final int OVERRIDE_CLEAR_DELAY_CYCLES = 2;
 
    @Inject
    private Client client;
@@ -69,7 +70,10 @@ public class VisibilityEnhancer extends Plugin
    private final Map<Player, int[]> originalEquipmentMap = new HashMap<>();
    private final Set<Projectile> myProjectiles = new HashSet<>();
    private final Map<byte[], byte[]> originalTransparencies = new WeakHashMap<>();
+
    private final Map<Player, Integer> overrideStartCycle = new HashMap<>();
+   private final Map<Player, Integer> overrideLastSeenCycle = new HashMap<>();
+   private final Set<Player> overrideForcedPlayers = new HashSet<>();
 
    private final Hooks.RenderableDrawListener drawListener = this::shouldDraw;
 
@@ -92,7 +96,9 @@ public class VisibilityEnhancer extends Plugin
             hotkeyHeld = true;
             lastPress = null;
          }
-         else if (lastPress != null && !hotkeyHeld && config.doubleTapDelay() > 0
+         else if (lastPress != null
+                 && !hotkeyHeld
+                 && config.doubleTapDelay() > 0
                  && Duration.between(lastPress, Instant.now()).compareTo(Duration.ofMillis(config.doubleTapDelay())) < 0)
          {
             pluginToggledOn = false;
@@ -366,6 +372,8 @@ public class VisibilityEnhancer extends Plugin
       originalEquipmentMap.remove(p);
       customHitsplats.remove(p);
       overrideStartCycle.remove(p);
+      overrideLastSeenCycle.remove(p);
+      overrideForcedPlayers.remove(p);
    }
 
    @Subscribe
@@ -782,22 +790,61 @@ public class VisibilityEnhancer extends Plugin
          return false;
       }
 
-      if (model.getOverrideAmount() == 0 || isExemptAnimation(player))
+      int currentCycle = client.getGameCycle();
+
+      if (isExemptAnimation(player))
       {
          overrideStartCycle.remove(player);
+         overrideLastSeenCycle.remove(player);
+         overrideForcedPlayers.remove(player);
          return false;
       }
 
-      int currentCycle = client.getGameCycle();
-      Integer startCycle = overrideStartCycle.get(player);
-
-      if (startCycle == null)
+      if (model.getOverrideAmount() != 0)
       {
-         overrideStartCycle.put(player, currentCycle);
+         overrideLastSeenCycle.put(player, currentCycle);
+
+         Integer startCycle = overrideStartCycle.get(player);
+         if (startCycle == null)
+         {
+            overrideStartCycle.put(player, currentCycle);
+            return overrideForcedPlayers.contains(player);
+         }
+
+         if (overrideForcedPlayers.contains(player))
+         {
+            return true;
+         }
+
+         if (currentCycle - startCycle >= OVERRIDE_OPAQUE_DELAY_CYCLES)
+         {
+            overrideForcedPlayers.add(player);
+            return true;
+         }
+
          return false;
       }
 
-      return currentCycle - startCycle >= OVERRIDE_OPAQUE_DELAY_CYCLES;
+      Integer lastSeenCycle = overrideLastSeenCycle.get(player);
+
+      if (overrideForcedPlayers.contains(player))
+      {
+         if (lastSeenCycle != null && currentCycle - lastSeenCycle <= OVERRIDE_CLEAR_DELAY_CYCLES)
+         {
+            return true;
+         }
+
+         overrideForcedPlayers.remove(player);
+      }
+
+      if (lastSeenCycle != null && currentCycle - lastSeenCycle <= OVERRIDE_CLEAR_DELAY_CYCLES)
+      {
+         return true;
+      }
+
+      overrideStartCycle.remove(player);
+      overrideLastSeenCycle.remove(player);
+      return false;
    }
 
    private void applyConfiguredOpacity(Player player)
@@ -982,7 +1029,10 @@ public class VisibilityEnhancer extends Plugin
    {
       restoreOpacity(p);
       restoreClothing(p);
+
       overrideStartCycle.remove(p);
+      overrideLastSeenCycle.remove(p);
+      overrideForcedPlayers.remove(p);
 
       PlayerComposition comp = p.getPlayerComposition();
       if (comp != null)
@@ -1012,6 +1062,8 @@ public class VisibilityEnhancer extends Plugin
       myProjectiles.clear();
       customHitsplats.clear();
       overrideStartCycle.clear();
+      overrideLastSeenCycle.clear();
+      overrideForcedPlayers.clear();
 
       for (Map.Entry<byte[], byte[]> entry : originalTransparencies.entrySet())
       {
