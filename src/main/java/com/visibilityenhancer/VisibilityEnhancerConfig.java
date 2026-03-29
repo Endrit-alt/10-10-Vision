@@ -34,7 +34,7 @@ public interface VisibilityEnhancerConfig extends Config
 			section = opacitySection,
 			description = "Transparency of nearby players"
 	)
-	default int playerOpacity() { return 100; }
+	default int playerOpacity() { return 5; }
 
 	@Range(min = 1, max = 50)
 	@ConfigItem(
@@ -85,7 +85,7 @@ public interface VisibilityEnhancerConfig extends Config
 
 	@ConfigItem(
 			keyName = "selfClearGround",
-			name = "Clear Ground (Self)",
+			name = "Clear Ground Self",
 			position = 1,
 			section = extrasSection,
 			description = "Hides your Cape, Shield, Legs, and Boots to see ground markers better."
@@ -94,7 +94,7 @@ public interface VisibilityEnhancerConfig extends Config
 
 	@ConfigItem(
 			keyName = "othersClearGround",
-			name = "Clear Ground (Others)",
+			name = "Clear Ground Others (8 max)",
 			position = 2,
 			section = extrasSection,
 			description = "Hides Cape, Shield, Legs, and Boots on nearby affected players."
@@ -108,7 +108,7 @@ public interface VisibilityEnhancerConfig extends Config
 			section = extrasSection,
 			description = "Completely hides projectiles that didn't come from you"
 	)
-	default boolean hideOthersProjectiles() { return false; }
+	default boolean hideOthersProjectiles() { return true; }
 
 	@ConfigItem(
 			keyName = "customTransparentPrayers",
@@ -117,7 +117,7 @@ public interface VisibilityEnhancerConfig extends Config
 			section = extrasSection,
 			description = "Hides native overheads, hitsplats, and HP bars for others, replacing them with transparent versions"
 	)
-	default boolean othersTransparentPrayers() { return false; }
+	default boolean othersTransparentPrayers() { return true; }
 
 	@Range(min = 0, max = 100)
 	@Units(Units.PERCENT)
@@ -150,7 +150,7 @@ public interface VisibilityEnhancerConfig extends Config
 			section = extrasSection,
 			description = "(Requires 'Transparent Others Extras' enabled)<br>Transparency of replaced hitsplats"
 	)
-	default int hitsplatsOpacity() { return 30; }
+	default int hitsplatsOpacity() { return 20; }
 
 	@ConfigItem(
 			keyName = "hideHitsplatBackground",
@@ -299,7 +299,7 @@ public interface VisibilityEnhancerConfig extends Config
 			section = styleSection,
 			description = "How soft the edges of the primary line are"
 	)
-	default int outlineFeather() { return 0; }
+	default int outlineFeather() { return 10; }
 
 	@ConfigItem(
 			keyName = "enableGlow",
@@ -308,7 +308,7 @@ public interface VisibilityEnhancerConfig extends Config
 			section = styleSection,
 			description = "Adds a secondary, wider blurred layer behind the primary line"
 	)
-	default boolean enableGlow() { return false; }
+	default boolean enableGlow() { return true; }
 
 	@Range(min = 1, max = 20)
 	@ConfigItem(
@@ -318,7 +318,7 @@ public interface VisibilityEnhancerConfig extends Config
 			section = styleSection,
 			description = "Width of the glow layer"
 	)
-	default int glowWidth() { return 4; }
+	default int glowWidth() { return 2; }
 
 	@Range(min = 1, max = 10)
 	@ConfigItem(
@@ -328,7 +328,7 @@ public interface VisibilityEnhancerConfig extends Config
 			section = styleSection,
 			description = "Softness/Feathering of the glow layer"
 	)
-	default int glowFeather() { return 4; }
+	default int glowFeather() { return 10; }
 
 	@ConfigItem(
 			keyName = "fillFloorTile",
