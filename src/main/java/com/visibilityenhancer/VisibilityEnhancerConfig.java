@@ -46,24 +46,24 @@ public interface VisibilityEnhancerConfig extends Config
 	)
 	default int proximityRange() { return 25; }
 
-	@ConfigItem(
-			keyName = "ignoreFriends",
-			name = "Ignore Friends",
-			position = 5,
-			section = opacitySection,
-			description = "Prevents friends from being affected/transparent"
-	)
-	default boolean ignoreFriends() { return false; }
-
 	@Range(min = 1, max = 100)
 	@ConfigItem(
 			keyName = "maxAffectedPlayers",
 			name = "Max Others",
-			position = 6,
+			position = 5,
 			section = opacitySection,
 			description = "The maximum number of players to apply effects to"
 	)
 	default int maxAffectedPlayers() { return 8; }
+
+	@ConfigItem(
+			keyName = "ignoreFriends",
+			name = "Ignore Friends",
+			position = 6,
+			section = opacitySection,
+			description = "Prevents friends from being affected/transparent"
+	)
+	default boolean ignoreFriends() { return false; }
 
 
 	// --- EXTRAS SECTION ---
