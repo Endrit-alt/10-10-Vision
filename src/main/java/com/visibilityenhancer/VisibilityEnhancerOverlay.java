@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.HashMap;
 import javax.inject.Inject;
 import net.runelite.api.Actor;
 import net.runelite.api.Client;
@@ -196,6 +197,9 @@ public class VisibilityEnhancerOverlay extends Overlay
 				{
 					renderOutlineLayers(player, othersColor);
 				}
+				renderStackWarnings(graphics);
+
+				return null;
 			}
 		}
 
@@ -630,6 +634,120 @@ public class VisibilityEnhancerOverlay extends Overlay
 			case SMITE: return SpriteID.PRAYER_SMITE;
 			case REDEMPTION: return SpriteID.PRAYER_REDEMPTION;
 			default: return -1;
+		}
+	}
+
+	private void renderStackWarnings(Graphics2D graphics)
+	{
+		if (!config.enableStackWarnings())
+		{
+			return;
+		}
+
+		Player local = client.getLocalPlayer();
+		if (local == null) return;
+
+		// --- COMBAT CHECK ---
+		if (config.stackWarningOnlyInCombat())
+		{
+			// You are in combat if you have a target, or if your HP bar is visible (ratio > -1)
+			boolean inCombat = local.getInteracting() != null || local.getHealthRatio() > -1;
+
+			if (!inCombat)
+			{
+				return;
+			}
+		}
+
+		WorldPoint localPoint = local.getWorldLocation();
+
+		// Track how many players are on each WorldPoint
+		Map<WorldPoint, Integer> tileCounts = new HashMap<>();
+
+		for (Player p : client.getPlayers())
+		{
+			if (p == null) continue;
+
+			WorldPoint wp = p.getWorldLocation();
+			if (wp != null)
+			{
+				tileCounts.put(wp, tileCounts.getOrDefault(wp, 0) + 1);
+			}
+		}
+
+		for (Map.Entry<WorldPoint, Integer> entry : tileCounts.entrySet())
+		{
+			int count = entry.getValue();
+			WorldPoint wp = entry.getKey();
+
+			// --- ONLY MY TILE CHECK ---
+			if (config.stackWarningOnlySelf() && (localPoint == null || !localPoint.equals(wp)))
+			{
+				continue; // Skip drawing if the user is not on this tile
+			}
+
+			// ONLY draw if the stack meets or exceeds the user's chosen threshold
+			if (count >= config.stackThreshold())
+			{
+				LocalPoint lp = LocalPoint.fromWorld(client, wp);
+
+				if (lp == null) continue;
+
+				Color baseColor = config.stackWarningColor();
+
+				// Calculate a subtle pulse using the game cycle (sine wave)
+				int cycle = client.getGameCycle();
+				double pulseRange = 0.6; // Fluctuates between 40% and 100% of the base alpha
+				double sine = Math.sin(cycle * 0.15); // Adjust speed of the pulse here
+				int pulseAlpha = (int) (baseColor.getAlpha() * (1.0 - (pulseRange * (sine + 1.0) / 2.0)));
+				pulseAlpha = Math.max(0, Math.min(255, pulseAlpha));
+
+				Color pulseColor = new Color(baseColor.getRed(), baseColor.getGreen(), baseColor.getBlue(), pulseAlpha);
+
+				// Draw the pulsing floor tile
+				Polygon poly = Perspective.getCanvasTilePoly(client, lp);
+				if (poly != null)
+				{
+					// Only drawing the border now (no fill), so we make it slightly thicker and apply the pulse to it
+					graphics.setStroke(new BasicStroke(2));
+					graphics.setColor(pulseColor);
+					graphics.draw(poly);
+				}
+
+				// --- 3D ANCHORED TEXT POSITION ---
+				// A tile is 128x128 local units. Moving 64 units puts us exactly on the edge.
+				int edgeOffset = Perspective.LOCAL_TILE_SIZE / 2;
+
+				// X + edgeOffset moves to the right edge. Y - edgeOffset moves to the bottom edge.
+				LocalPoint cornerAnchor = new LocalPoint(lp.getX() + edgeOffset, lp.getY() - edgeOffset);
+
+				String countText = String.valueOf(count);
+				int zOffset = 0; // Floor height
+
+				// Calculate the 2D screen point based on the 3D corner anchor
+				Point textPoint = Perspective.getCanvasTextLocation(client, graphics, cornerAnchor, countText, zOffset);
+
+				if (textPoint != null)
+				{
+					graphics.setFont(FontManager.getRunescapeBoldFont());
+
+					// Make the text stronger than the base color, but cap it at 220 so it never reaches 255 (fully opaque)
+					int textAlpha = Math.min(220, baseColor.getAlpha() + 60);
+
+					Color textColor = new Color(baseColor.getRed(), baseColor.getGreen(), baseColor.getBlue(), textAlpha);
+					Color shadowColor = new Color(0, 0, 0, textAlpha); // Transparent shadow matching text alpha
+
+					int drawX = textPoint.getX() + 5;
+					int drawY = textPoint.getY();
+
+					// Manually draw the shadow and text to ensure opacity affects everything
+					graphics.setColor(shadowColor);
+					graphics.drawString(countText, drawX + 1, drawY + 1);
+
+					graphics.setColor(textColor);
+					graphics.drawString(countText, drawX, drawY);
+				}
+			}
 		}
 	}
 }

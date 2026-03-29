@@ -403,6 +403,63 @@ public interface VisibilityEnhancerConfig extends Config
 	)
 	default boolean enableAreaFiltering() { return false; }
 
+	// --- STACK WARNINGS SECTION ---
+	@ConfigSection(
+			name = "Stack Warnings",
+			description = "Visual warnings for multiple players standing on the same tile.",
+			position = 15
+	)
+	String stackSection = "stackSection";
+
+	@ConfigItem(
+			keyName = "enableStackWarnings",
+			name = "Enable Stack Warnings",
+			position = 1,
+			section = stackSection,
+			description = "Shows a tile pulse and count when multiple players are on the same tile."
+	)
+	default boolean enableStackWarnings() { return false; }
+
+	@ConfigItem(
+			keyName = "stackWarningOnlyInCombat",
+			name = "Only in Combat",
+			position = 2,
+			section = stackSection,
+			description = "Only show stack warnings when you are actively targeting something or taking damage."
+	)
+	default boolean stackWarningOnlyInCombat() { return true; }
+
+	@ConfigItem(
+			keyName = "stackWarningOnlySelf",
+			name = "Only My Tile",
+			position = 3,
+			section = stackSection,
+			description = "Only show the stack warning if you are standing on the stacked tile."
+	)
+	default boolean stackWarningOnlySelf() { return false; }
+
+	@Range(min = 2, max = 8)
+	@ConfigItem(
+			keyName = "stackThreshold",
+			name = "Minimum Stack Size",
+			position = 4,
+			section = stackSection,
+			description = "The minimum number of stacked players required to show the warning."
+	)
+	default int stackThreshold() { return 2; }
+
+	@Alpha
+	@ConfigItem(
+			keyName = "stackWarningColor",
+			name = "Warning Color",
+			position = 5,
+			section = stackSection,
+			description = "Color of the pulse and text when the stack threshold is reached."
+	)
+	default Color stackWarningColor() { return new Color(255, 0, 0, 150); } // Default to Red
+
+
+
 	// --- THEATRE OF BLOOD ---
 	@ConfigSection(name = "Theatre of Blood", description = "ToB Rooms", position = 51)
 	String tobSection = "tobSection";
