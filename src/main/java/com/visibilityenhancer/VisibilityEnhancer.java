@@ -28,7 +28,7 @@ import net.runelite.client.util.HotkeyListener;
 @PluginDescriptor(
         name = "Visibility",
         description = "Teammate opacity, ground-view filters, and outlines for raids and other PvM content.",
-        tags = {"Visibility","ghostly","Experience","pvm","raid", "raids", "raids visibility enhancer","visibility enhancer", "opacity", "outline", "equipment","visibility","Ghost","teammates","team"}
+        tags = {"Visibility", "ghostly", "Experience", "pvm", "raid", "raids", "raids visibility enhancer", "visibility enhancer", "opacity", "outline", "equipment", "visibility", "Ghost", "teammates", "team"}
 )
 public class VisibilityEnhancer extends Plugin
 {
@@ -70,6 +70,8 @@ public class VisibilityEnhancer extends Plugin
    @Getter
    private final Set<Player> ghostedPlayers = new HashSet<>();
 
+   private final Set<Player> fallbackHiddenPlayers = new HashSet<>();
+
    private final Map<Player, int[]> originalEquipmentMap = new HashMap<>();
    private final Set<Projectile> myProjectiles = new HashSet<>();
    private final Map<byte[], byte[]> originalTransparencies = new WeakHashMap<>();
@@ -79,6 +81,9 @@ public class VisibilityEnhancer extends Plugin
 
    // Tracks players whose base models cannot support transparency
    private final Set<Player> immunePlayers = new HashSet<>();
+
+   // Tracks players whose base models have proven they do support transparency
+   private final Set<Player> supportedPlayers = new HashSet<>();
 
    private final Map<Player, Integer> overrideStartCycle = new HashMap<>();
    private final Map<Player, Integer> overrideLastSeenCycle = new HashMap<>();
@@ -138,8 +143,9 @@ public class VisibilityEnhancer extends Plugin
       public void hotkeyPressed()
       {
          peekHeld = true;
-         clientThread.invokeLater(() -> {
-            checkStateTransition(); // Wakes up the plugin if outside a boss room
+         clientThread.invokeLater(() ->
+         {
+            checkStateTransition();
             forceOpacityUpdate();
          });
       }
@@ -148,10 +154,10 @@ public class VisibilityEnhancer extends Plugin
       public void hotkeyReleased()
       {
          peekHeld = false;
-         clientThread.invokeLater(() -> {
-            checkStateTransition(); // Puts it to sleep and cleans up if outside a boss room
+         clientThread.invokeLater(() ->
+         {
+            checkStateTransition();
 
-            // Only update opacity if we are STILL active (e.g., inside a boss room)
             if (isActive())
             {
                forceOpacityUpdate();
@@ -161,25 +167,20 @@ public class VisibilityEnhancer extends Plugin
    };
 
    private static final Set<Integer> EXEMPT_ANIMATIONS = ImmutableSet.<Integer>builder()
-           // --- Original custom additions ---
            .add(1378, 7642, 7643, 7514, 1062, 1203, 7644, 7640, 7638, 10172, 5062, 9168, 8104)
 
-           // --- Consuming ---
            .add(AnimationID.CONSUMING)
 
-           // --- Teleports ---
            .add(AnimationID.BOOK_HOME_TELEPORT_1, AnimationID.BOOK_HOME_TELEPORT_2, AnimationID.BOOK_HOME_TELEPORT_3, AnimationID.BOOK_HOME_TELEPORT_4, AnimationID.BOOK_HOME_TELEPORT_5)
            .add(AnimationID.COW_HOME_TELEPORT_1, AnimationID.COW_HOME_TELEPORT_2, AnimationID.COW_HOME_TELEPORT_3, AnimationID.COW_HOME_TELEPORT_4, AnimationID.COW_HOME_TELEPORT_5, AnimationID.COW_HOME_TELEPORT_6)
            .add(AnimationID.LEAGUE_HOME_TELEPORT_1, AnimationID.LEAGUE_HOME_TELEPORT_2, AnimationID.LEAGUE_HOME_TELEPORT_3, AnimationID.LEAGUE_HOME_TELEPORT_4, AnimationID.LEAGUE_HOME_TELEPORT_5, AnimationID.LEAGUE_HOME_TELEPORT_6)
            .add(AnimationID.SHATTERED_LEAGUE_HOME_TELEPORT_1, AnimationID.SHATTERED_LEAGUE_HOME_TELEPORT_2, AnimationID.SHATTERED_LEAGUE_HOME_TELEPORT_3, AnimationID.SHATTERED_LEAGUE_HOME_TELEPORT_4, AnimationID.SHATTERED_LEAGUE_HOME_TELEPORT_5, AnimationID.SHATTERED_LEAGUE_HOME_TELEPORT_6)
 
-           // --- Skilling: Herblore & Farming ---
            .add(AnimationID.HERBLORE_PESTLE_AND_MORTAR, AnimationID.HERBLORE_POTIONMAKING, AnimationID.HERBLORE_MAKE_TAR)
            .add(AnimationID.HERBLORE_MIXOLOGY_CONCENTRATE, AnimationID.HERBLORE_MIXOLOGY_CRYSTALIZE, AnimationID.HERBLORE_MIXOLOGY_HOMOGENIZE, AnimationID.HERBLORE_MIXOLOGY_REFINER)
            .add(AnimationID.FARMING_HARVEST_FRUIT_TREE, AnimationID.FARMING_HARVEST_BUSH, AnimationID.FARMING_HARVEST_HERB, AnimationID.FARMING_USE_COMPOST, AnimationID.FARMING_CURE_WITH_POTION)
            .add(AnimationID.FARMING_PLANT_SEED, AnimationID.FARMING_HARVEST_FLOWER, AnimationID.FARMING_MIX_ULTRACOMPOST, AnimationID.FARMING_HARVEST_ALLOTMENT)
 
-           // --- Skilling: Crafting, Fletching & Smithing ---
            .add(AnimationID.GEM_CUTTING_OPAL, AnimationID.GEM_CUTTING_JADE, AnimationID.GEM_CUTTING_REDTOPAZ, AnimationID.GEM_CUTTING_SAPPHIRE, AnimationID.GEM_CUTTING_EMERALD, AnimationID.GEM_CUTTING_RUBY, AnimationID.GEM_CUTTING_DIAMOND, AnimationID.GEM_CUTTING_AMETHYST)
            .add(AnimationID.CRAFTING_LEATHER, AnimationID.CRAFTING_GLASSBLOWING, AnimationID.CRAFTING_SPINNING, AnimationID.CRAFTING_POTTERS_WHEEL, AnimationID.CRAFTING_POTTERY_OVEN, AnimationID.CRAFTING_LOOM, AnimationID.CRAFTING_CRUSH_BLESSED_BONES, AnimationID.CRAFTING_BATTLESTAVES)
            .add(AnimationID.SMITHING_SMELTING, AnimationID.SMITHING_CANNONBALL, AnimationID.SMITHING_ANVIL, AnimationID.SMITHING_IMCANDO_HAMMER)
@@ -189,7 +190,6 @@ public class VisibilityEnhancer extends Plugin
            .add(AnimationID.FLETCHING_STRING_MAPLE_SHORTBOW, AnimationID.FLETCHING_STRING_MAPLE_LONGBOW, AnimationID.FLETCHING_STRING_YEW_SHORTBOW, AnimationID.FLETCHING_STRING_YEW_LONGBOW, AnimationID.FLETCHING_STRING_MAGIC_SHORTBOW, AnimationID.FLETCHING_STRING_MAGIC_LONGBOW)
            .add(AnimationID.FLETCHING_ATTACH_BOLT_TIPS_TO_BRONZE_BOLT, AnimationID.FLETCHING_ATTACH_BOLT_TIPS_TO_IRON_BROAD_BOLT, AnimationID.FLETCHING_ATTACH_BOLT_TIPS_TO_BLURITE_BOLT, AnimationID.FLETCHING_ATTACH_BOLT_TIPS_TO_STEEL_BOLT, AnimationID.FLETCHING_ATTACH_BOLT_TIPS_TO_MITHRIL_BOLT, AnimationID.FLETCHING_ATTACH_BOLT_TIPS_TO_ADAMANT_BOLT, AnimationID.FLETCHING_ATTACH_BOLT_TIPS_TO_RUNE_BOLT, AnimationID.FLETCHING_ATTACH_BOLT_TIPS_TO_DRAGON_BOLT)
 
-           // --- Skilling: Woodcutting & Firemaking ---
            .add(AnimationID.WOODCUTTING_BRONZE, AnimationID.WOODCUTTING_IRON, AnimationID.WOODCUTTING_STEEL, AnimationID.WOODCUTTING_BLACK, AnimationID.WOODCUTTING_MITHRIL, AnimationID.WOODCUTTING_ADAMANT, AnimationID.WOODCUTTING_RUNE, AnimationID.WOODCUTTING_GILDED, AnimationID.WOODCUTTING_DRAGON, AnimationID.WOODCUTTING_DRAGON_OR, AnimationID.WOODCUTTING_INFERNAL, AnimationID.WOODCUTTING_3A_AXE, AnimationID.WOODCUTTING_CRYSTAL, AnimationID.WOODCUTTING_TRAILBLAZER)
            .add(AnimationID.WOODCUTTING_2H_BRONZE, AnimationID.WOODCUTTING_2H_IRON, AnimationID.WOODCUTTING_2H_STEEL, AnimationID.WOODCUTTING_2H_BLACK, AnimationID.WOODCUTTING_2H_MITHRIL, AnimationID.WOODCUTTING_2H_ADAMANT, AnimationID.WOODCUTTING_2H_RUNE, AnimationID.WOODCUTTING_2H_DRAGON, AnimationID.WOODCUTTING_2H_CRYSTAL, AnimationID.WOODCUTTING_2H_CRYSTAL_INACTIVE, AnimationID.WOODCUTTING_2H_3A)
            .add(AnimationID.WOODCUTTING_ENT_BRONZE, AnimationID.WOODCUTTING_ENT_IRON, AnimationID.WOODCUTTING_ENT_STEEL, AnimationID.WOODCUTTING_ENT_BLACK, AnimationID.WOODCUTTING_ENT_MITHRIL, AnimationID.WOODCUTTING_ENT_ADAMANT, AnimationID.WOODCUTTING_ENT_RUNE, AnimationID.WOODCUTTING_ENT_GILDED, AnimationID.WOODCUTTING_ENT_DRAGON, AnimationID.WOODCUTTING_ENT_DRAGON_OR, AnimationID.WOODCUTTING_ENT_INFERNAL, AnimationID.WOODCUTTING_ENT_INFERNAL_OR, AnimationID.WOODCUTTING_ENT_3A, AnimationID.WOODCUTTING_ENT_CRYSTAL, AnimationID.WOODCUTTING_ENT_CRYSTAL_INACTIVE, AnimationID.WOODCUTTING_ENT_TRAILBLAZER)
@@ -197,29 +197,24 @@ public class VisibilityEnhancer extends Plugin
            .add(AnimationID.FIREMAKING)
            .add(AnimationID.FIREMAKING_FORESTERS_CAMPFIRE_ARCTIC_PINE, AnimationID.FIREMAKING_FORESTERS_CAMPFIRE_BLISTERWOOD, AnimationID.FIREMAKING_FORESTERS_CAMPFIRE_LOGS, AnimationID.FIREMAKING_FORESTERS_CAMPFIRE_MAGIC, AnimationID.FIREMAKING_FORESTERS_CAMPFIRE_MAHOGANY, AnimationID.FIREMAKING_FORESTERS_CAMPFIRE_MAPLE, AnimationID.FIREMAKING_FORESTERS_CAMPFIRE_OAK, AnimationID.FIREMAKING_FORESTERS_CAMPFIRE_REDWOOD, AnimationID.FIREMAKING_FORESTERS_CAMPFIRE_TEAK, AnimationID.FIREMAKING_FORESTERS_CAMPFIRE_WILLOW, AnimationID.FIREMAKING_FORESTERS_CAMPFIRE_YEW)
 
-           // --- Skilling: Mining ---
            .add(AnimationID.MINING_BRONZE_PICKAXE, AnimationID.MINING_IRON_PICKAXE, AnimationID.MINING_STEEL_PICKAXE, AnimationID.MINING_BLACK_PICKAXE, AnimationID.MINING_MITHRIL_PICKAXE, AnimationID.MINING_ADAMANT_PICKAXE, AnimationID.MINING_RUNE_PICKAXE, AnimationID.MINING_GILDED_PICKAXE, AnimationID.MINING_DRAGON_PICKAXE, AnimationID.MINING_DRAGON_PICKAXE_UPGRADED, AnimationID.MINING_DRAGON_PICKAXE_OR, AnimationID.MINING_DRAGON_PICKAXE_OR_TRAILBLAZER, AnimationID.MINING_INFERNAL_PICKAXE, AnimationID.MINING_3A_PICKAXE, AnimationID.MINING_CRYSTAL_PICKAXE, AnimationID.MINING_TRAILBLAZER_PICKAXE, AnimationID.MINING_TRAILBLAZER_PICKAXE_2, AnimationID.MINING_TRAILBLAZER_PICKAXE_3)
            .add(AnimationID.MINING_MOTHERLODE_BRONZE, AnimationID.MINING_MOTHERLODE_IRON, AnimationID.MINING_MOTHERLODE_STEEL, AnimationID.MINING_MOTHERLODE_BLACK, AnimationID.MINING_MOTHERLODE_MITHRIL, AnimationID.MINING_MOTHERLODE_ADAMANT, AnimationID.MINING_MOTHERLODE_RUNE, AnimationID.MINING_MOTHERLODE_GILDED, AnimationID.MINING_MOTHERLODE_DRAGON, AnimationID.MINING_MOTHERLODE_DRAGON_UPGRADED, AnimationID.MINING_MOTHERLODE_DRAGON_OR, AnimationID.MINING_MOTHERLODE_DRAGON_OR_TRAILBLAZER, AnimationID.MINING_MOTHERLODE_INFERNAL, AnimationID.MINING_MOTHERLODE_3A, AnimationID.MINING_MOTHERLODE_CRYSTAL, AnimationID.MINING_MOTHERLODE_TRAILBLAZER)
            .add(AnimationID.MINING_CRASHEDSTAR_BRONZE, AnimationID.MINING_CRASHEDSTAR_IRON, AnimationID.MINING_CRASHEDSTAR_STEEL, AnimationID.MINING_CRASHEDSTAR_BLACK, AnimationID.MINING_CRASHEDSTAR_MITHRIL, AnimationID.MINING_CRASHEDSTAR_ADAMANT, AnimationID.MINING_CRASHEDSTAR_RUNE, AnimationID.MINING_CRASHEDSTAR_GILDED, AnimationID.MINING_CRASHEDSTAR_DRAGON, AnimationID.MINING_CRASHEDSTAR_DRAGON_UPGRADED, AnimationID.MINING_CRASHEDSTAR_DRAGON_OR, AnimationID.MINING_CRASHEDSTAR_DRAGON_OR_TRAILBLAZER, AnimationID.MINING_CRASHEDSTAR_INFERNAL, AnimationID.MINING_CRASHEDSTAR_3A, AnimationID.MINING_CRASHEDSTAR_CRYSTAL)
            .add(AnimationID.DENSE_ESSENCE_CHIPPING, AnimationID.DENSE_ESSENCE_CHISELING)
 
-           // --- Skilling: Fishing & Cooking ---
            .add(AnimationID.FISHING_BIG_NET, AnimationID.FISHING_NET, AnimationID.FISHING_POLE_CAST, AnimationID.FISHING_CAGE, AnimationID.FISHING_HARPOON, AnimationID.FISHING_BARBTAIL_HARPOON, AnimationID.FISHING_DRAGON_HARPOON, AnimationID.FISHING_DRAGON_HARPOON_OR, AnimationID.FISHING_INFERNAL_HARPOON, AnimationID.FISHING_CRYSTAL_HARPOON, AnimationID.FISHING_TRAILBLAZER_HARPOON, AnimationID.FISHING_OILY_ROD, AnimationID.FISHING_KARAMBWAN, AnimationID.FISHING_BARBARIAN_ROD)
            .add(AnimationID.FISHING_CRUSHING_INFERNAL_EELS, AnimationID.FISHING_CRUSHING_INFERNAL_EELS_IMCANDO_HAMMER, AnimationID.FISHING_CUTTING_SACRED_EELS)
            .add(AnimationID.FISHING_BAREHAND, AnimationID.FISHING_BAREHAND_WINDUP_1, AnimationID.FISHING_BAREHAND_WINDUP_2, AnimationID.FISHING_BAREHAND_CAUGHT_SHARK_1, AnimationID.FISHING_BAREHAND_CAUGHT_SHARK_2, AnimationID.FISHING_BAREHAND_CAUGHT_SWORDFISH_1, AnimationID.FISHING_BAREHAND_CAUGHT_SWORDFISH_2, AnimationID.FISHING_BAREHAND_CAUGHT_TUNA_1, AnimationID.FISHING_BAREHAND_CAUGHT_TUNA_2)
            .add(AnimationID.FISHING_PEARL_ROD, AnimationID.FISHING_PEARL_FLY_ROD, AnimationID.FISHING_PEARL_BARBARIAN_ROD, AnimationID.FISHING_PEARL_ROD_2, AnimationID.FISHING_PEARL_FLY_ROD_2, AnimationID.FISHING_PEARL_BARBARIAN_ROD_2, AnimationID.FISHING_PEARL_OILY_ROD)
            .add(AnimationID.COOKING_FIRE, AnimationID.COOKING_RANGE, AnimationID.COOKING_WINE, AnimationID.MAKING_SUNFIRE_WINE)
 
-           // --- Skilling: Hunter ---
            .add(AnimationID.HUNTER_LAY_BOXTRAP_BIRDSNARE, AnimationID.HUNTER_LAY_NETTRAP, AnimationID.HUNTER_LAY_MANIACAL_MONKEY_BOULDER_TRAP, AnimationID.HUNTER_CHECK_BIRD_SNARE)
 
-           // --- Magic (Utility) & Prayer ---
            .add(AnimationID.MAGIC_CHARGING_ORBS, AnimationID.MAGIC_MAKE_TABLET, AnimationID.MAGIC_ENCHANTING_JEWELRY, AnimationID.MAGIC_ENCHANTING_AMULET_1, AnimationID.MAGIC_ENCHANTING_AMULET_2, AnimationID.MAGIC_ENCHANTING_AMULET_3, AnimationID.MAGIC_ENCHANTING_BOLTS)
            .add(AnimationID.MAGIC_LUNAR_SHARED, AnimationID.MAGIC_LUNAR_CURE_PLANT, AnimationID.MAGIC_LUNAR_PLANK_MAKE, AnimationID.MAGIC_LUNAR_STRING_JEWELRY, AnimationID.MAGIC_ARCEUUS_RESURRECT_CROPS)
            .add(AnimationID.BURYING_BONES, AnimationID.USING_GILDED_ALTAR, AnimationID.SACRIFICE_BLESSED_BONE_SHARDS)
            .add(AnimationID.ECTOFUNTUS_FILL_SLIME_BUCKET, AnimationID.ECTOFUNTUS_GRIND_BONES, AnimationID.ECTOFUNTUS_INSERT_BONES, AnimationID.ECTOFUNTUS_EMPTY_BIN)
 
-           // --- Misc Utility ---
            .add(AnimationID.LOOKING_INTO, AnimationID.DIG, AnimationID.CONSTRUCTION, AnimationID.CONSTRUCTION_IMCANDO, AnimationID.SAND_COLLECTION, AnimationID.PISCARILIUS_CRANE_REPAIR, AnimationID.HOME_MAKE_TABLET)
            .add(AnimationID.MILKING_COW, AnimationID.CHURN_MILK_SHORT, AnimationID.CHURN_MILK_MEDIUM, AnimationID.CHURN_MILK_LONG)
            .add(AnimationID.CLEANING_SPECIMENS_1, AnimationID.CLEANING_SPECIMENS_2, AnimationID.THIEVING_VARLAMORE_STEALING_VALUABLES)
@@ -397,6 +392,12 @@ public class VisibilityEnhancer extends Plugin
       {
          for (Player p : currentInRange)
          {
+            if (shouldHideWithFallback(p))
+            {
+               restoreOpacity(p);
+               continue;
+            }
+
             int pOpacity = getEffectiveOpacity(p);
 
             if (pOpacity < 100)
@@ -483,12 +484,14 @@ public class VisibilityEnhancer extends Plugin
       }
 
       ghostedPlayers.remove(p);
+      fallbackHiddenPlayers.remove(p);
       originalEquipmentMap.remove(p);
       customHitsplats.remove(p);
       overrideStartCycle.remove(p);
       overrideLastSeenCycle.remove(p);
       overrideForcedPlayers.remove(p);
       immunePlayers.remove(p);
+      supportedPlayers.remove(p);
    }
 
    @Subscribe
@@ -524,16 +527,7 @@ public class VisibilityEnhancer extends Plugin
 
       if (ghostedPlayers.contains(p))
       {
-         if (config.othersClearGround())
-         {
-            applyClothingFilter(p);
-         }
-         else
-         {
-            restoreClothing(p);
-         }
-
-         applyConfiguredOpacity(p);
+         updateGhostedPlayer(p, config.othersClearGround());
       }
    }
 
@@ -697,25 +691,7 @@ public class VisibilityEnhancer extends Plugin
 
       for (Player p : currentInRange)
       {
-         int pOpacity = getEffectiveOpacity(p);
-
-         if (pOpacity < 100)
-         {
-            applyOpacity(p, pOpacity);
-         }
-         else
-         {
-            restoreOpacity(p);
-         }
-
-         if (hideOthersClothes)
-         {
-            applyClothingFilter(p);
-         }
-         else if (originalEquipmentMap.containsKey(p))
-         {
-            restoreClothing(p);
-         }
+         updateGhostedPlayer(p, hideOthersClothes);
       }
 
       noLongerGhosted.addAll(ghostedPlayers);
@@ -864,6 +840,12 @@ public class VisibilityEnhancer extends Plugin
       if (renderable instanceof Player)
       {
          Player player = (Player) renderable;
+
+         if (!drawingUI && fallbackHiddenPlayers.contains(player))
+         {
+            return false;
+         }
+
          boolean isGhost = ghostedPlayers.contains(player);
 
          if (drawingUI && isGhost && config.othersTransparentPrayers())
@@ -962,17 +944,11 @@ public class VisibilityEnhancer extends Plugin
 
       updatePlayersInRange();
 
+      boolean hideOthersClothes = config.othersClearGround();
+
       for (Player p : currentInRange)
       {
-         int pOpacity = getEffectiveOpacity(p);
-         if (pOpacity < 100)
-         {
-            applyOpacity(p, pOpacity);
-         }
-         else
-         {
-            restoreOpacity(p);
-         }
+         updateGhostedPlayer(p, hideOthersClothes);
       }
 
       ghostedPlayers.addAll(currentInRange);
@@ -1074,6 +1050,121 @@ public class VisibilityEnhancer extends Plugin
       else
       {
          restoreOpacity(player);
+      }
+   }
+
+   private boolean isOpacityUnsupported(Player player)
+   {
+      if (player == null)
+      {
+         return false;
+      }
+
+      Model model = player.getModel();
+      if (model == null)
+      {
+         return !supportedPlayers.contains(player);
+      }
+
+      byte[] trans = model.getFaceTransparencies();
+      boolean hasTransparencyArray = trans != null && trans.length > 0;
+      boolean isBaseState = player.getAnimation() == -1 && player.getGraphic() == -1;
+
+      if (isBaseState)
+      {
+         if (hasTransparencyArray)
+         {
+            supportedPlayers.add(player);
+            immunePlayers.remove(player);
+            return false;
+         }
+
+         supportedPlayers.remove(player);
+         immunePlayers.add(player);
+         return true;
+      }
+
+      if (immunePlayers.contains(player))
+      {
+         return true;
+      }
+
+      if (supportedPlayers.contains(player))
+      {
+         return false;
+      }
+
+      // Unknown while animated or graphiced:
+      // hide until a clean base-state model proves support.
+      return true;
+   }
+
+   private boolean shouldHideWithFallback(Player player)
+   {
+      if (player == null || player == client.getLocalPlayer())
+      {
+         if (player != null)
+         {
+            fallbackHiddenPlayers.remove(player);
+         }
+         return false;
+      }
+
+      int opacity = getEffectiveOpacity(player);
+      if (opacity >= 100)
+      {
+         fallbackHiddenPlayers.remove(player);
+         return false;
+      }
+
+      boolean unsupported = isOpacityUnsupported(player);
+      if (unsupported)
+      {
+         fallbackHiddenPlayers.add(player);
+         return true;
+      }
+
+      fallbackHiddenPlayers.remove(player);
+      return false;
+   }
+
+   private void updateGhostedPlayer(Player player, boolean hideOthersClothes)
+   {
+      if (player == null)
+      {
+         return;
+      }
+
+      if (shouldHideWithFallback(player))
+      {
+         restoreOpacity(player);
+
+         if (originalEquipmentMap.containsKey(player))
+         {
+            restoreClothing(player);
+         }
+
+         return;
+      }
+
+      int opacity = getEffectiveOpacity(player);
+
+      if (opacity < 100)
+      {
+         applyOpacity(player, opacity);
+      }
+      else
+      {
+         restoreOpacity(player);
+      }
+
+      if (hideOthersClothes)
+      {
+         applyClothingFilter(player);
+      }
+      else if (originalEquipmentMap.containsKey(player))
+      {
+         restoreClothing(player);
       }
    }
 
@@ -1287,6 +1378,7 @@ public class VisibilityEnhancer extends Plugin
       restoreOpacity(p);
       restoreClothing(p);
 
+      fallbackHiddenPlayers.remove(p);
       overrideStartCycle.remove(p);
       overrideLastSeenCycle.remove(p);
       overrideForcedPlayers.remove(p);
@@ -1301,6 +1393,7 @@ public class VisibilityEnhancer extends Plugin
    private void clearAllGhosting()
    {
       Set<Player> allAffected = new HashSet<>(ghostedPlayers);
+      allAffected.addAll(fallbackHiddenPlayers);
       allAffected.addAll(originalEquipmentMap.keySet());
 
       Player local = client.getLocalPlayer();
@@ -1315,6 +1408,7 @@ public class VisibilityEnhancer extends Plugin
       }
 
       ghostedPlayers.clear();
+      fallbackHiddenPlayers.clear();
       inRange.clear();
       currentInRange.clear();
       originalEquipmentMap.clear();
@@ -1334,9 +1428,11 @@ public class VisibilityEnhancer extends Plugin
             System.arraycopy(original, 0, trans, 0, original.length);
          }
       }
+
       originalTransparencies.clear();
       playerTrackedTransparencies.clear();
       immunePlayers.clear();
+      supportedPlayers.clear();
    }
 
    private int clampAlpha(int opacityPercent)

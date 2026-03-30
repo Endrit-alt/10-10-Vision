@@ -354,7 +354,7 @@ public interface VisibilityEnhancerConfig extends Config
 			section = outlineSection,
 			description = "Choose how to highlight nearby affected players"
 	)
-	default HighlightStyle highlightOthers() { return HighlightStyle.NONE; }
+	default HighlightStyle highlightOthers() { return HighlightStyle.OUTLINE; }
 
 	@Alpha
 	@ConfigItem(
@@ -364,7 +364,7 @@ public interface VisibilityEnhancerConfig extends Config
 			section = outlineSection,
 			description = "The color of other players' highlights"
 	)
-	default Color othersOutlineColor() { return new Color(255, 255, 255, 150); }
+	default Color othersOutlineColor() { return new Color(255, 255, 255, 25); }
 
 	@ConfigItem(
 			keyName = "highlightThralls",
@@ -383,7 +383,7 @@ public interface VisibilityEnhancerConfig extends Config
 			section = outlineSection,
 			description = "The color of thrall highlights"
 	)
-	default Color thrallsOutlineColor() { return new Color(0, 255, 255, 150); }
+	default Color thrallsOutlineColor() { return new Color(0, 255, 255, 25); }
 
 
 	// --- OUTLINE STYLE SECTION ---
@@ -411,7 +411,7 @@ public interface VisibilityEnhancerConfig extends Config
 			section = styleSection,
 			description = "Thickness of the primary outline"
 	)
-	default int outlineWidth() { return 1; }
+	default int outlineWidth() { return 2; }
 
 	@Range(min = 0, max = 10)
 	@ConfigItem(
