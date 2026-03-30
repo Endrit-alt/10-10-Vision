@@ -66,6 +66,44 @@ public interface VisibilityEnhancerConfig extends Config
 	default boolean ignoreFriends() { return false; }
 
 
+	// --- PROXIMITY FADING SECTION ---
+	@ConfigSection(
+			name = "Proximity Fading",
+			description = "Settings for making players fade in or out dynamically based on distance.",
+			position = 5
+	)
+	String proximityFadingSection = "proximityFadingSection";
+
+	@ConfigItem(
+			keyName = "distanceBasedOpacity",
+			name = "Enable Distance Fading",
+			position = 1,
+			section = proximityFadingSection,
+			description = "Scales opacity based on distance. Players near you use 'Others Opacity', fading to 100% further away."
+	)
+	default boolean distanceBasedOpacity() { return false; }
+
+	@Range(min = 0, max = 25)
+	@ConfigItem(
+			keyName = "fadeStartDistance",
+			name = "Fade Start Distance",
+			position = 2,
+			section = proximityFadingSection,
+			description = "Tiles away before players start losing transparency."
+	)
+	default int fadeStartDistance() { return 4; }
+
+	@Range(min = 1, max = 25)
+	@ConfigItem(
+			keyName = "fadeEndDistance",
+			name = "Fade End Distance",
+			position = 3,
+			section = proximityFadingSection,
+			description = "Tiles away where players become fully 100% opaque."
+	)
+	default int fadeEndDistance() { return 6; }
+
+
 	// --- EXTRAS SECTION ---
 	@ConfigSection(
 			name = "Visibility Extras",
@@ -164,7 +202,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "hideThralls",
 			name = "Hide Thralls & Pets",
-			position = 9,
+			position = 10,
 			section = extrasSection,
 			description = "Completely hides all Arceeus thralls and players' pets"
 	)
@@ -173,7 +211,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "funGhostChat",
 			name = "Ghostly Chat (Woo!)",
-			position = 10,
+			position = 11,
 			section = extrasSection,
 			description = "Replaces nearby transparent players' overhead text with ghostly wailing."
 	)
@@ -376,6 +414,15 @@ public interface VisibilityEnhancerConfig extends Config
 	@Units(Units.MILLISECONDS)
 	default int doubleTapDelay() { return 250; }
 
+	@ConfigItem(
+			keyName = "peekHotkey",
+			name = "Peek Through (Hold)",
+			position = 3,
+			section = hotkeySection,
+			description = "Hold this key to temporarily maximize visibility: hides thralls, pets, projectiles, and fully ghosts teammates."
+	)
+	default Keybind peekHotkey() { return Keybind.NOT_SET; }
+
 
 	// --- AREA FILTERING SECTION ---
 	@ConfigSection(
@@ -448,7 +495,6 @@ public interface VisibilityEnhancerConfig extends Config
 			description = "Color of the pulse and text when the stack threshold is reached."
 	)
 	default Color stackWarningColor() { return new Color(255, 0, 0, 25); }
-
 
 
 	// --- THEATRE OF BLOOD ---

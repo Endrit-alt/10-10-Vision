@@ -62,6 +62,9 @@ public class VisibilityEnhancer extends Plugin
    @Getter
    private boolean hotkeyHeld = false;
 
+   @Getter
+   private boolean peekHeld = false;
+
    private Instant lastPress;
 
    @Getter
@@ -126,6 +129,23 @@ public class VisibilityEnhancer extends Plugin
       public void hotkeyReleased()
       {
          hotkeyHeld = false;
+      }
+   };
+
+   private final HotkeyListener peekListener = new HotkeyListener(() -> config.peekHotkey())
+   {
+      @Override
+      public void hotkeyPressed()
+      {
+         peekHeld = true;
+         clientThread.invokeLater(() -> forceOpacityUpdate());
+      }
+
+      @Override
+      public void hotkeyReleased()
+      {
+         peekHeld = false;
+         clientThread.invokeLater(() -> forceOpacityUpdate());
       }
    };
 
@@ -225,8 +245,10 @@ public class VisibilityEnhancer extends Plugin
       overlayManager.add(overlay);
       hooks.registerRenderableDrawListener(drawListener);
       keyManager.registerKeyListener(hotkeyListener);
+      keyManager.registerKeyListener(peekListener);
       pluginToggledOn = true;
       hotkeyHeld = false;
+      peekHeld = false;
       wasActive = false;
    }
 
@@ -236,6 +258,7 @@ public class VisibilityEnhancer extends Plugin
       overlayManager.remove(overlay);
       hooks.unregisterRenderableDrawListener(drawListener);
       keyManager.unregisterKeyListener(hotkeyListener);
+      keyManager.unregisterKeyListener(peekListener);
 
       clientThread.invokeLater(this::clearAllGhosting);
 
@@ -354,7 +377,24 @@ public class VisibilityEnhancer extends Plugin
 
       cachedLocalPlayer = client.getLocalPlayer();
 
-      if (config.hideOthersProjectiles())
+      if (config.distanceBasedOpacity() && !peekHeld)
+      {
+         for (Player p : currentInRange)
+         {
+            int pOpacity = getEffectiveOpacity(p);
+
+            if (pOpacity < 100)
+            {
+               applyOpacity(p, pOpacity);
+            }
+            else
+            {
+               restoreOpacity(p);
+            }
+         }
+      }
+
+      if (peekHeld || config.hideOthersProjectiles())
       {
          for (Player p : ghostedPlayers)
          {
@@ -619,14 +659,15 @@ public class VisibilityEnhancer extends Plugin
          currentInRange.addAll(inRange);
       }
 
-      int othersOpacity = getEffectiveOthersOpacity();
       boolean hideOthersClothes = config.othersClearGround();
 
       for (Player p : currentInRange)
       {
-         if (othersOpacity < 100)
+         int pOpacity = getEffectiveOpacity(p);
+
+         if (pOpacity < 100)
          {
-            applyOpacity(p, othersOpacity);
+            applyOpacity(p, pOpacity);
          }
          else
          {
@@ -779,7 +820,7 @@ public class VisibilityEnhancer extends Plugin
          return true;
       }
 
-      if (renderable instanceof Projectile && config.hideOthersProjectiles())
+      if (renderable instanceof Projectile && (peekHeld || config.hideOthersProjectiles()))
       {
          Projectile proj = (Projectile) renderable;
          Actor target = proj.getInteracting();
@@ -797,7 +838,7 @@ public class VisibilityEnhancer extends Plugin
          }
       }
 
-      if (renderable instanceof NPC && config.hideThralls())
+      if (renderable instanceof NPC && (peekHeld || config.hideThralls()))
       {
          NPC npc = (NPC) renderable;
 
@@ -839,7 +880,64 @@ public class VisibilityEnhancer extends Plugin
          return getEffectiveSelfOpacity();
       }
 
-      return getEffectiveOthersOpacity();
+      if (peekHeld)
+      {
+         return 0;
+      }
+
+      int baseOpacity = getEffectiveOthersOpacity();
+
+      if (config.distanceBasedOpacity())
+      {
+         LocalPoint localLoc = local.getLocalLocation();
+         LocalPoint playerLoc = player.getLocalLocation();
+
+         if (localLoc != null && playerLoc != null)
+         {
+            double dist = localLoc.distanceTo(playerLoc);
+
+            double minDist = config.fadeStartDistance() * 128.0;
+            double maxDist = Math.max(minDist + 1.0, config.fadeEndDistance() * 128.0);
+
+            if (dist <= minDist)
+            {
+               return baseOpacity;
+            }
+            else if (dist >= maxDist)
+            {
+               return 100;
+            }
+            else
+            {
+               double fraction = (dist - minDist) / (maxDist - minDist);
+               fraction = fraction * fraction;
+               return (int) (baseOpacity + ((100 - baseOpacity) * fraction));
+            }
+         }
+      }
+
+      return baseOpacity;
+   }
+
+   private void forceOpacityUpdate()
+   {
+      if (client.getLocalPlayer() == null)
+      {
+         return;
+      }
+
+      for (Player p : currentInRange)
+      {
+         int pOpacity = getEffectiveOpacity(p);
+         if (pOpacity < 100)
+         {
+            applyOpacity(p, pOpacity);
+         }
+         else
+         {
+            restoreOpacity(p);
+         }
+      }
    }
 
    private void checkStateTransition()
