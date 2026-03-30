@@ -81,7 +81,7 @@ public interface VisibilityEnhancerConfig extends Config
 			section = proximityFadingSection,
 			description = "Scales opacity based on distance. Players near you use 'Others Opacity', fading to 100% further away."
 	)
-	default boolean distanceBasedOpacity() { return false; }
+	default boolean distanceBasedOpacity() { return true; }
 
 	@Range(min = 0, max = 25)
 	@ConfigItem(
@@ -101,13 +101,14 @@ public interface VisibilityEnhancerConfig extends Config
 			section = proximityFadingSection,
 			description = "Tiles away where players become fully 100% opaque."
 	)
-	default int fadeEndDistance() { return 6; }
+	default int fadeEndDistance() { return 8; }
+
 
 	// --- HOTKEY SECTION ---
 	@ConfigSection(
 			name = "Hotkeys",
 			description = "Hotkey settings for the plugin.",
-			position = 40
+			position = 8
 	)
 	String hotkeySection = "hotkeySection";
 
@@ -153,7 +154,7 @@ public interface VisibilityEnhancerConfig extends Config
 			name = "Clear Ground Self",
 			position = 1,
 			section = extrasSection,
-			description = "Hides your Cape, Shield, Legs, and Boots to see ground markers better."
+			description = "Hides your Cape, Shield, Legs, and Boots to see ground markers better. Does not support opacity."
 	)
 	default boolean selfClearGround() { return false; }
 
@@ -162,7 +163,7 @@ public interface VisibilityEnhancerConfig extends Config
 			name = "Clear Ground Others",
 			position = 2,
 			section = extrasSection,
-			description = "Hides Cape, Shield, Legs, and Boots on nearby affected players."
+			description = "Hides Cape, Shield, Legs, and Boots on nearby affected players. Does not support opacity."
 	)
 	default boolean othersClearGround() { return false; }
 
@@ -252,6 +253,62 @@ public interface VisibilityEnhancerConfig extends Config
 			description = "Replaces nearby transparent players' overhead text with ghostly wailing."
 	)
 	default boolean funGhostChat() { return false; }
+
+
+	// --- STACK WARNINGS SECTION ---
+	@ConfigSection(
+			name = "Stack Warnings",
+			description = "Visual warnings for multiple players standing on the same tile.",
+			position = 15
+	)
+	String stackSection = "stackSection";
+
+	@ConfigItem(
+			keyName = "enableStackWarnings",
+			name = "Enable Stack Warnings",
+			position = 1,
+			section = stackSection,
+			description = "Shows a tile pulse and count when multiple players are on the same tile."
+	)
+	default boolean enableStackWarnings() { return true; }
+
+	@ConfigItem(
+			keyName = "stackWarningOnlyInCombat",
+			name = "Only In Combat",
+			position = 2,
+			section = stackSection,
+			description = "Only show stack warnings when you are actively targeting something or taking damage."
+	)
+	default boolean stackWarningOnlyInCombat() { return true; }
+
+	@ConfigItem(
+			keyName = "stackWarningOnlySelf",
+			name = "Only My Tile",
+			position = 3,
+			section = stackSection,
+			description = "Only show the stack warning if you are standing on the stacked tile."
+	)
+	default boolean stackWarningOnlySelf() { return true; }
+
+	@Range(min = 2, max = 8)
+	@ConfigItem(
+			keyName = "stackThreshold",
+			name = "Minimum Stack Size",
+			position = 4,
+			section = stackSection,
+			description = "The minimum number of stacked players required to show the warning."
+	)
+	default int stackThreshold() { return 2; }
+
+	@Alpha
+	@ConfigItem(
+			keyName = "stackWarningColor",
+			name = "Warning Color",
+			position = 5,
+			section = stackSection,
+			description = "Color of the pulse and text when the stack threshold is reached."
+	)
+	default Color stackWarningColor() { return new Color(255, 0, 0, 25); }
 
 
 	// --- OUTLINE SECTION ---
@@ -423,6 +480,7 @@ public interface VisibilityEnhancerConfig extends Config
 	)
 	default boolean borderDashed() { return false; }
 
+
 	// --- AREA FILTERING SECTION ---
 	@ConfigSection(
 			name = "Area Filtering",
@@ -439,61 +497,6 @@ public interface VisibilityEnhancerConfig extends Config
 			description = "If enabled, the plugin will ONLY apply its effects in the selected rooms below."
 	)
 	default boolean enableAreaFiltering() { return false; }
-
-	// --- STACK WARNINGS SECTION ---
-	@ConfigSection(
-			name = "Stack Warnings",
-			description = "Visual warnings for multiple players standing on the same tile.",
-			position = 15
-	)
-	String stackSection = "stackSection";
-
-	@ConfigItem(
-			keyName = "enableStackWarnings",
-			name = "Enable Stack Warnings",
-			position = 1,
-			section = stackSection,
-			description = "Shows a tile pulse and count when multiple players are on the same tile."
-	)
-	default boolean enableStackWarnings() { return true; }
-
-	@ConfigItem(
-			keyName = "stackWarningOnlyInCombat",
-			name = "Only In Combat",
-			position = 2,
-			section = stackSection,
-			description = "Only show stack warnings when you are actively targeting something or taking damage."
-	)
-	default boolean stackWarningOnlyInCombat() { return true; }
-
-	@ConfigItem(
-			keyName = "stackWarningOnlySelf",
-			name = "Only My Tile",
-			position = 3,
-			section = stackSection,
-			description = "Only show the stack warning if you are standing on the stacked tile."
-	)
-	default boolean stackWarningOnlySelf() { return true; }
-
-	@Range(min = 2, max = 8)
-	@ConfigItem(
-			keyName = "stackThreshold",
-			name = "Minimum Stack Size",
-			position = 4,
-			section = stackSection,
-			description = "The minimum number of stacked players required to show the warning."
-	)
-	default int stackThreshold() { return 2; }
-
-	@Alpha
-	@ConfigItem(
-			keyName = "stackWarningColor",
-			name = "Warning Color",
-			position = 5,
-			section = stackSection,
-			description = "Color of the pulse and text when the stack threshold is reached."
-	)
-	default Color stackWarningColor() { return new Color(255, 0, 0, 25); }
 
 
 	// --- THEATRE OF BLOOD ---
