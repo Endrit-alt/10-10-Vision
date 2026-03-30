@@ -372,8 +372,56 @@ public class VisibilityEnhancer extends Plugin
                return;
             }
 
-            customHitsplats.computeIfAbsent(p, k -> new ArrayList<>())
-                    .add(new CustomHitsplat(amount, client.getTickCount() + 4));
+            List<CustomHitsplat> list = customHitsplats.computeIfAbsent(p, k -> new ArrayList<>());
+            CustomHitsplat newHit = new CustomHitsplat(amount, client.getTickCount() + 4);
+
+            if (list.size() < 4)
+            {
+               list.add(newHit);
+            }
+            else
+            {
+               // We have 4 hitsplats. Find the best candidate to evict.
+               // Priority: Oldest 0-damage hit > Oldest damage hit.
+               int targetIndex = -1;
+               boolean foundZero = false;
+
+               for (int i = 0; i < list.size(); i++)
+               {
+                  CustomHitsplat h = list.get(i);
+                  if (h.getAmount() == 0)
+                  {
+                     if (!foundZero)
+                     {
+                        targetIndex = i;
+                        foundZero = true;
+                     }
+                     else if (h.getDespawnTick() < list.get(targetIndex).getDespawnTick())
+                     {
+                        targetIndex = i; // Older zero-damage hit
+                     }
+                  }
+                  else if (!foundZero)
+                  {
+                     if (targetIndex == -1 || h.getDespawnTick() < list.get(targetIndex).getDespawnTick())
+                     {
+                        targetIndex = i; // Oldest non-zero hit
+                     }
+                  }
+               }
+
+               // If the new hit is a 0, and the only things we can evict are actual damage hits, just discard the 0.
+               if (amount == 0 && !foundZero)
+               {
+                  return;
+               }
+
+               // Replace the chosen hitsplat in place so the grid doesn't shuffle visually
+               if (targetIndex != -1)
+               {
+                  list.set(targetIndex, newHit);
+               }
+            }
          }
       }
    }
