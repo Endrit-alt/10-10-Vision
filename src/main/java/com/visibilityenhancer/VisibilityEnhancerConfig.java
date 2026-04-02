@@ -49,7 +49,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@Range(min = 1, max = 100)
 	@ConfigItem(
 			keyName = "maxAffectedPlayers",
-			name = "Max Others",
+			name = "Other Player Limit",
 			position = 5,
 			section = opacitySection,
 			description = "The maximum number of players to apply effects to"
