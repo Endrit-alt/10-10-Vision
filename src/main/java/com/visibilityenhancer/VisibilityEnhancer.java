@@ -352,6 +352,42 @@ public class VisibilityEnhancer extends Plugin
       return false;
    }
 
+   private boolean isInCriticalBossRoom()
+   {
+      Player local = client.getLocalPlayer();
+      if (local == null)
+      {
+         return false;
+      }
+
+      LocalPoint lp = local.getLocalLocation();
+      if (lp == null)
+      {
+         return false;
+      }
+
+      int regionId = WorldPoint.fromLocalInstance(client, lp).getRegionID();
+
+      switch (regionId)
+      {
+         case 12613: // Maiden
+         case 12612: // Xarpus
+         case 13123: // Sotetseg
+         case 13379: // Sotetseg Maze
+         case 12611: // Verzik
+         case 12889: // Olm
+         case 15184: // Wardens p1
+            // case 14676: Akkha
+         case 14164: // Kephri
+         case 15188: // Ba-Ba
+         case 11601: // Nex
+         case 15515: // Nightmare
+            return true;
+         default:
+            return false;
+      }
+   }
+
    @Subscribe
    public void onHitsplatApplied(HitsplatApplied event)
    {
@@ -788,50 +824,64 @@ public class VisibilityEnhancer extends Plugin
       Map<byte[], Model> arrayToModel = new HashMap<>();
       Map<byte[], Integer> arrayState = new HashMap<>();
 
-      final int STATE_RESTORE = 0;
+      final int STATE_OTHERS = 0;
       final int STATE_MINE = 1;
-      final int STATE_OTHERS = 2;
+      final int STATE_RESTORE = 2;
+      final int STATE_FORCE_OPAQUE = 3;
 
-      for (Projectile proj : client.getProjectiles())
+      boolean skipProjectiles = isInCriticalBossRoom();
+
+      if (!skipProjectiles)
       {
-         Model m = proj.getModel();
-         if (m == null)
+         for (Projectile proj : client.getProjectiles())
          {
-            continue;
-         }
-
-         byte[] trans = m.getFaceTransparencies();
-         if (trans == null || trans.length == 0)
-         {
-            continue;
-         }
-
-         Actor target = proj.getInteracting();
-         boolean isBossProjectile = BOSS_PROJECTILES.contains(proj.getId());
-         boolean isTargetingMeOrGround = (target == local || target == null);
-         boolean isMine = myProjectiles.contains(proj);
-
-         Integer currentState = arrayState.get(trans);
-
-         if (isBossProjectile || isTargetingMeOrGround)
-         {
-            arrayState.put(trans, STATE_RESTORE);
-            arrayToModel.put(trans, m);
-         }
-         else if (isMine)
-         {
-            if (currentState == null || currentState != STATE_RESTORE)
+            Model m = proj.getModel();
+            if (m == null)
             {
-               arrayState.put(trans, STATE_MINE);
+               continue;
+            }
+
+            byte[] trans = m.getFaceTransparencies();
+            if (trans == null || trans.length == 0)
+            {
+               continue;
+            }
+
+            Actor target = proj.getInteracting();
+            boolean isBossProjectile = BOSS_PROJECTILES.contains(proj.getId());
+            boolean isTargetingMeOrGround = (target == local || target == null);
+            boolean isMine = myProjectiles.contains(proj);
+
+            int currentState = arrayState.getOrDefault(trans, -1);
+
+            if (isBossProjectile)
+            {
+               arrayState.put(trans, STATE_FORCE_OPAQUE);
                arrayToModel.put(trans, m);
             }
-         }
-         else
-         {
-            if (currentState == null)
+            else if (isTargetingMeOrGround)
             {
-               arrayState.put(trans, STATE_OTHERS);
-               arrayToModel.put(trans, m);
+               if (currentState < STATE_RESTORE)
+               {
+                  arrayState.put(trans, STATE_RESTORE);
+                  arrayToModel.put(trans, m);
+               }
+            }
+            else if (isMine)
+            {
+               if (currentState < STATE_MINE)
+               {
+                  arrayState.put(trans, STATE_MINE);
+                  arrayToModel.put(trans, m);
+               }
+            }
+            else
+            {
+               if (currentState < STATE_OTHERS)
+               {
+                  arrayState.put(trans, STATE_OTHERS);
+                  arrayToModel.put(trans, m);
+               }
             }
          }
       }
@@ -842,7 +892,19 @@ public class VisibilityEnhancer extends Plugin
          int state = entry.getValue();
          Model m = arrayToModel.get(trans);
 
-         if (state == STATE_RESTORE)
+         if (state == STATE_FORCE_OPAQUE)
+         {
+            byte[] original = originalTransparencies.get(trans);
+            if (original == null)
+            {
+               originalTransparencies.put(trans, trans.clone());
+            }
+            for (int i = 0; i < trans.length; i++)
+            {
+               trans[i] = 0;
+            }
+         }
+         else if (state == STATE_RESTORE)
          {
             restoreModelAlpha(m);
          }
@@ -880,9 +942,14 @@ public class VisibilityEnhancer extends Plugin
 
       if (renderable instanceof Projectile && (peekHeld || config.hideOthersProjectiles()))
       {
+         // KILLSWITCH: Do not hide any projectiles in critical boss rooms
+         if (isInCriticalBossRoom())
+         {
+            return true;
+         }
+
          Projectile proj = (Projectile) renderable;
 
-         // FIX: Never hide critical raid projectiles (like the Sotetseg death ball)
          if (BOSS_PROJECTILES.contains(proj.getId()))
          {
             return true;
