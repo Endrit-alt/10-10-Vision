@@ -2,7 +2,6 @@ Visibility is a RuneLite plugin built for raid teams that want better visibility
 
 The plugin is aimed at group content such as Tombs of Amascut, Chambers of Xeric, Theatre of Blood and Nex, while remaining useful anywhere a person wants better visibility.
 
-THIS IS NOT A DYNAMIC PLUGIN. Opacity will not change dynamically, and has to be manually adjusted inside the runelite settings.
 ---
 
 ## Features
