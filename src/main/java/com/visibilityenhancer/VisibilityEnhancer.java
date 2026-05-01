@@ -96,6 +96,7 @@ public class VisibilityEnhancer extends Plugin
    private final Hooks.RenderableDrawListener drawListener = this::shouldDraw;
 
    private Player cachedLocalPlayer;
+   private boolean localPlayerExemptFromCull = false;
 
    private final List<Player> inRange = new ArrayList<>();
    private final Set<Player> currentInRange = new HashSet<>();
@@ -195,6 +196,7 @@ public class VisibilityEnhancer extends Plugin
 
    private static final Set<Integer> EXEMPT_ANIMATIONS = ImmutableSet.<Integer>builder()
            .add(1378, 7642, 7643, 7514, 1062, 1203, 7644, 7640, 7638, 10172, 5062, 9168, 8104)
+           .add(714) // Standard spellbook teleport
 
            .add(AnimationID.CONSUMING)
 
@@ -455,6 +457,24 @@ public class VisibilityEnhancer extends Plugin
       }
 
       cachedLocalPlayer = client.getLocalPlayer();
+
+      // Cache the exemption state here to prevent iterator allocations in shouldDraw
+      localPlayerExemptFromCull = false;
+      if (cachedLocalPlayer != null)
+      {
+         // Ignore graphics if the player is doing a teleport or skilling animation
+         boolean hasGraphic = false;
+         if (!isExemptAnimation(cachedLocalPlayer))
+         {
+            hasGraphic = cachedLocalPlayer.getGraphic() != -1 ||
+                    (cachedLocalPlayer.getSpotAnims() != null && cachedLocalPlayer.getSpotAnims().iterator().hasNext());
+         }
+
+         Model model = cachedLocalPlayer.getModel();
+         boolean hasOverride = model != null && model.getOverrideAmount() != 0;
+
+         localPlayerExemptFromCull = hasGraphic || hasOverride;
+      }
 
       if (config.distanceBasedOpacity() && !peekHeld)
       {
@@ -939,18 +959,17 @@ public class VisibilityEnhancer extends Plugin
       {
          Player player = (Player) renderable;
 
-         // --- CORRECTED: Self 0% Opacity Cull ---
+         // --- Self 0% Opacity Cull (GC Optimized) ---
          if (player == cachedLocalPlayer && isSelfHidden)
          {
-            // If the engine is trying to draw the 3D model, hide it.
-            if (!drawingUI)
+            // Only cull if: No UI drawing AND no cached visual effects/overrides
+            if (!drawingUI && !localPlayerExemptFromCull)
             {
                return false;
             }
-            // If drawingUI is true (overhead text, hitsplats, etc.), it bypasses this and draws normally.
          }
 
-         // --- ORIGINAL: Others Fallback ---
+         // --- Others Fallback ---
          if (!drawingUI && fallbackHiddenPlayers.contains(player))
          {
             return false;

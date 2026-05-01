@@ -44,6 +44,7 @@ public interface VisibilityEnhancerConfig extends Config
 			section = opacitySection,
 			description = "Radius (in tiles) around you where other players will be affected"
 	)
+
 	default int proximityRange() { return 25; }
 
 	@Range(min = 1, max = 100)
