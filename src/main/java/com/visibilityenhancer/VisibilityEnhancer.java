@@ -269,7 +269,7 @@ public class VisibilityEnhancer extends Plugin
            .add (2197, 2198, 2199, 2200, 2203) //wardens
            .build();
 
-   // Graphics that should NOT un-cull the player (like weapon attack glows)
+   // Casting graphics
    private static final Set<Integer> IGNORED_SELF_GRAPHICS = ImmutableSet.<Integer>builder()
            .add(111)
            .add(1888,1923,1925,1927,1929,1931,1933,1935) //bowfa
