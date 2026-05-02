@@ -484,7 +484,7 @@ public class VisibilityEnhancer extends Plugin
                hasGraphic = true;
             }
 
-            // Check the SpotAnims table
+
             if (!hasGraphic && cachedLocalPlayer.getSpotAnims() != null)
             {
                for (ActorSpotAnim spotAnim : cachedLocalPlayer.getSpotAnims())
@@ -492,7 +492,7 @@ public class VisibilityEnhancer extends Plugin
                   if (!IGNORED_SELF_GRAPHICS.contains(spotAnim.getId()))
                   {
                      hasGraphic = true;
-                     break; // We found a valid boss graphic, stop looking
+                     break;
                   }
                }
             }
